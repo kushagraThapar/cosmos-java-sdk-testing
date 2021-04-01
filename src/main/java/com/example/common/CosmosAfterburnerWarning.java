@@ -1,4 +1,4 @@
-package com.azure.cosmos.sample.common;
+package com.example.common;
 
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
