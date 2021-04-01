@@ -48,17 +48,31 @@ public class CosmosDbClientOldTest {
 	static final String DELIMETER = "->";
 
 	public static void main(String[] srgs) {
-		List<String> locations = new ArrayList<>();
-//		locations.add("North Central US");
-//		locations.add("East US");
-		locations.add("West US 2");
-		CosmosDbClientOldTest cosmosDbClient = new CosmosDbClientBuilder("HOST",
-				"KEY", locations, true).build();
-		runOne(true, Strong, cosmosDbClient);
-		runOne(true, ConsistentPrefix, cosmosDbClient);
-//		runOne(false, Strong, cosmosDbClient);
-//		runOne(false, ConsistentPrefix, cosmosDbClient);
+		runV2SDK();
+		runV4SDK();
 	}
+
+	private static void runV2SDK () {
+        List<String> locations = new ArrayList<>();
+        //		locations.add("North Central US");
+        //		locations.add("East US");
+        locations.add("West US 2");
+        CosmosDbClientOldTest cosmosDbClient = new CosmosDbClientBuilder("host",
+            "key", locations, false).build();
+        		runOne(false, Strong, cosmosDbClient);
+        		runOne(false, ConsistentPrefix, cosmosDbClient);
+    }
+
+    private static void runV4SDK () {
+        List<String> locations = new ArrayList<>();
+        //		locations.add("North Central US");
+        //		locations.add("East US");
+        locations.add("West US 2");
+        CosmosDbClientOldTest cosmosDbClient = new CosmosDbClientBuilder("host",
+            "key", locations, true).build();
+        runOne(true, Strong, cosmosDbClient);
+        runOne(true, ConsistentPrefix, cosmosDbClient);
+    }
 
 	public static class CosmosDbClientBuilder {
 		private final String host;
@@ -361,9 +375,9 @@ public class CosmosDbClientOldTest {
 					return null;
 				}
 				long duration = res.getDuration().toMillis();
-//				if (duration > 60) {
-//				    logger.info("READ TIME: {}, Diagnostics : {}", duration, res.getDiagnostics().toString());
-//				}
+				if (duration > 60) {
+				    logger.info("READ TIME: {}, Diagnostics : {}", duration, res.getDiagnostics().toString());
+				}
 				Item item = res.getItem();
 				return item.getValue();
 			} catch (Exception e) {
@@ -416,9 +430,9 @@ public class CosmosDbClientOldTest {
 			CosmosItemResponse<Item> res =
 			getClientSdk(consistency).getDatabase(database).getContainer(namespace).upsertItem(item, new com.azure.cosmos.models.PartitionKey(item.getId()), options);
 			long duration = res.getDuration().toMillis();
-//			if (duration > 100) {
-//			    logger.info("WRITE TIME: {}, Diagnostics : {}", duration, res.getDiagnostics().toString());
-//			}
+			if (duration > 100) {
+			    logger.info("WRITE TIME: {}, Diagnostics : {}", duration, res.getDiagnostics().toString());
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
