@@ -4,8 +4,7 @@ import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosContainer;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
-import com.azure.cosmos.models.ModelBridgeInternal;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.azure.cosmos.models.FeedResponse;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,20 +29,19 @@ public class QueryThrottlingHangIssue {
 
         CosmosContainer container = cosmosClient.getDatabase("testDB").getContainer("testContainer");
         CosmosQueryRequestOptions options = new CosmosQueryRequestOptions();
-        ModelBridgeInternal.setQueryRequestOptionsMaxItemCount(options, 1);
-        //        for (int i = 1; i < 10000; i++) {
-        //            container.createItem(getObjectNode(String.valueOf(i), String.valueOf(10000 % i), "prop-" + (10000 % i)));
-        //        }
         ExecutorService executorService = Executors.newFixedThreadPool(10);
         for(int i = 1; i < 30; i++) {
             executorService.submit(() -> {
                 for (int j = 1; j < 5000; j++) {
                     String query = "select * from c where c.prop = 'prop-" + (10000 % j) + "'";
-                    Iterator<ObjectNode> iterator = container.queryItems(query, options,
-                        ObjectNode.class).iterator();
+
+                    //  ASK: There is no way to provide a timeout to iterator API from CosmosPagedIterable
+                    Iterator<FeedResponse<ObjectNode>> iterator = container.queryItems(query, options,
+                        ObjectNode.class).iterableByPage(1).iterator();
+
                     while (iterator.hasNext()) {
-                        ObjectNode objectNode = iterator.next();
-                        logger.info("Internal object node  - {}", objectNode.get("id"));
+                        FeedResponse<ObjectNode> feedResponse = iterator.next();
+                        logger.info("Response is  - {}", feedResponse.getResults());
                     }
                 }
             });
@@ -53,13 +51,5 @@ public class QueryThrottlingHangIssue {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-    }
-
-    private static ObjectNode getObjectNode(String id, String pkValue, String additionalProperty) {
-        ObjectNode objectNode = new ObjectMapper().createObjectNode();
-        objectNode.put("id", id);
-        objectNode.put("mypk", pkValue);
-        objectNode.put("prop", additionalProperty);
-        return objectNode;
     }
 }
