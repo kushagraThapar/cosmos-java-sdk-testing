@@ -19,7 +19,7 @@ import static com.example.common.Configurations.key;
 
 public class QueryThrottlingHangIssue {
 
-    private final static Logger logger = LoggerFactory.getLogger(CosmosMetricsRegistryExample.class);
+    private final static Logger logger = LoggerFactory.getLogger(QueryThrottlingHangIssue.class);
 
     public static void main(String[] args) {
         CosmosClient cosmosClient = new CosmosClientBuilder()
