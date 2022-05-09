@@ -14,6 +14,17 @@ public class FluxHangIssue {
     private final static Logger logger = LoggerFactory.getLogger(FluxHangIssue.class);
 
     public static void main(String[] args) throws InterruptedException {
+
+        //  General hook to handle java.lang.errors
+        Schedulers.onHandleError((thread, throwable) -> {
+            logger.info("Error occurred in thread : {}", thread, throwable);
+            //  Take appropriate action here on Errors which are not recoverable
+            if (throwable instanceof Error) {
+                logger.info("It is a java.lang.Error, can't do much");
+                System.exit(99);
+            }
+        });
+
         fluxHang();
 
         fluxWithTimeoutNoHang();
