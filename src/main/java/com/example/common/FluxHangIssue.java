@@ -3,6 +3,7 @@ package com.example.common;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Hooks;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -15,28 +16,37 @@ public class FluxHangIssue {
 
     public static void main(String[] args) throws InterruptedException {
 
-        //  General hook to handle java.lang.errors
+//          General hook to handle java.lang.errors
         Schedulers.onHandleError((thread, throwable) -> {
             logger.info("Error occurred in thread : {}", thread, throwable);
             //  Take appropriate action here on Errors which are not recoverable
             if (throwable instanceof Error) {
-                logger.info("It is a java.lang.Error, can't do much");
+                logger.info("It is a java.lang.Error caught in Schedulers Hook, can't do much");
                 System.exit(99);
             }
         });
 
+//        FYI, one another way to catch it is using this code block:
+        Hooks.onNextError((throwable, o) -> {
+            if (throwable instanceof Error) {
+                logger.info("It is a java.lang.Error caught in onNextError, can't do much");
+                System.exit(99);
+            }
+            return throwable;
+        });
+
         fluxHang();
 
-        fluxWithTimeoutNoHang();
+//        fluxWithTimeoutNoHang();
     }
 
     public static void fluxHang() throws InterruptedException {
-        Flux<Integer> integerFlux = Flux.range(0, 7).map(number -> {
+        Flux<Integer> integerFlux = Flux.range(0, 7).flatMap(number -> {
             logger.info("Number is : {}", number);
             if (number > 5) {
-                throw new OutOfMemoryError("Custom GC Failure");
+                return Flux.error(new OutOfMemoryError("Custom GC Failure"));
             }
-            return number;
+            return Mono.just(number);
         }).doOnError(ex -> {
             logger.error("Completed exceptionally", ex);
         }).doOnNext(next -> {
