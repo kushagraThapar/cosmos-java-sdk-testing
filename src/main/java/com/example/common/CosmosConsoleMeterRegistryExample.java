@@ -50,6 +50,10 @@ public class CosmosConsoleMeterRegistryExample {
     private static final Logger logger = LoggerFactory.getLogger(CosmosConsoleMeterRegistryExample.class);
 
     public static void main(String[] args) {
+        createReadSessionNotAvailableThroughFaultInjection();
+    }
+
+    public static void createReadSessionNotAvailableThroughFaultInjection() {
         System.setProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED", String.valueOf(2));
 
         MeterRegistry meterRegistry = createMeterRegistry();
@@ -161,6 +165,9 @@ public class CosmosConsoleMeterRegistryExample {
         }
     }
 
+    public static void createReadSessionNotAvailableThroughInvalidSessionToken() {
+    }
+
     private static void execute(
         CosmosAsyncContainer container,
         Pair<String, String> idAndPkValPair,
@@ -171,7 +178,8 @@ public class CosmosConsoleMeterRegistryExample {
             try {
                 CosmosItemRequestOptions itemRequestOptions = new CosmosItemRequestOptions();
                 itemRequestOptions.setCosmosEndToEndOperationLatencyPolicyConfig(endToEndOperationLatencyPolicyConfig);
-                CosmosItemResponse<ObjectNode> response = container.readItem(idAndPkValPair.getLeft(), new PartitionKey(idAndPkValPair.getRight()), itemRequestOptions, ObjectNode.class).block();
+                CosmosItemResponse<ObjectNode> response = container.readItem(idAndPkValPair.getLeft(),
+                    new PartitionKey(idAndPkValPair.getRight()), itemRequestOptions, ObjectNode.class).block();
             } catch (Exception e) {
                 if (e instanceof CosmosException) {
                     CosmosException cosmosException = Utils.as(e, CosmosException.class);
