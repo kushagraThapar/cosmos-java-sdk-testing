@@ -3,10 +3,10 @@ package com.example.common;
 public class TestItem {
 
     String id;
-    String pk;
-    public TestItem(String id, String pk) {
+    String mypk;
+    public TestItem(String id, String mypk) {
         this.id = id;
-        this.pk = pk;
+        this.mypk = mypk;
     }
 
     public TestItem() {
@@ -16,7 +16,7 @@ public class TestItem {
         return id;
     }
 
-    public String getPk() {
-        return pk;
+    public String getMypk() {
+        return mypk;
     }
 }
