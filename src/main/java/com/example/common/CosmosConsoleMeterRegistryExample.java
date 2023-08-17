@@ -101,14 +101,14 @@ public class CosmosConsoleMeterRegistryExample {
                 .getResultBuilder(FaultInjectionServerErrorType.READ_SESSION_NOT_AVAILABLE)
                 .build();
 
-            // longer fault injection in region 1 / east us
+            // sustained fault injection
             FaultInjectionRule readSessionUnavailableRulePrimaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInPrimaryRegion)
                 .result(badSessionTokenServerErrorResult)
                 .duration(Duration.ofSeconds(30))
                 .build();
 
-            // limit hit count to 3 in region 2 / west us
+            // sustained fault injection
             FaultInjectionRule readSessionUnavailableRuleSecondaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInSecondaryRegion)
                 .result(badSessionTokenServerErrorResult)
@@ -208,14 +208,14 @@ public class CosmosConsoleMeterRegistryExample {
                 .getResultBuilder(FaultInjectionServerErrorType.READ_SESSION_NOT_AVAILABLE)
                 .build();
 
-            // longer fault injection in region 1 / east us
+            // sustained fault injection
             FaultInjectionRule readSessionUnavailableRulePrimaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInPrimaryRegion)
                 .result(badSessionTokenServerErrorResult)
                 .duration(Duration.ofSeconds(30))
                 .build();
 
-            // limit hit count to 3 in region 2 / west us
+            // sustained fault injection
             FaultInjectionRule readSessionUnavailableRuleSecondaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInSecondaryRegion)
                 .result(badSessionTokenServerErrorResult)
@@ -288,7 +288,7 @@ public class CosmosConsoleMeterRegistryExample {
                     itemRequestOptions.setCosmosEndToEndOperationLatencyPolicyConfig(endToEndOperationLatencyPolicyConfig);
                 }
 
-                if (!invalidSessionToken.isEmpty()) {
+                if (invalidSessionToken != null && !invalidSessionToken.isEmpty()) {
                     itemRequestOptions.setSessionToken(invalidSessionToken);
                 }
 
