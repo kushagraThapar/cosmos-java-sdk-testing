@@ -51,6 +51,7 @@ public class CosmosConsoleMeterRegistryExample {
 
     public static void main(String[] args) {
         createReadSessionNotAvailableThroughFaultInjection();
+        createReadSessionNotAvailableThroughInvalidSessionToken();
     }
 
     public static void createReadSessionNotAvailableThroughFaultInjection() {
@@ -65,6 +66,8 @@ public class CosmosConsoleMeterRegistryExample {
         try {
             clientWithPreferredRegions = buildCosmosClient(clientTelemetryConfig);
 
+            // setup db and container and pass their ids accordingly
+            // ensure the container has a partition key definition of /mypk
             CosmosAsyncContainer containerForClientWithPreferredRegions = clientWithPreferredRegions
                 .getDatabase("test-db")
                 .getContainer("test-container");
@@ -79,6 +82,7 @@ public class CosmosConsoleMeterRegistryExample {
                 + "-session-token-" + UUID.randomUUID());
 
             // inject 404/1002s in two regions
+            // configure in accordance with preferredRegions on the client
             FaultInjectionCondition faultInjectionConditionForReadsInPrimaryRegion =
                 new FaultInjectionConditionBuilder()
                     .operationType(FaultInjectionOperationType.READ_ITEM)
@@ -98,14 +102,14 @@ public class CosmosConsoleMeterRegistryExample {
                 .build();
 
             // longer fault injection in region 1 / east us
-            FaultInjectionRule badSessionTokenRulePrimaryRegion = badSessionTokenRuleBuilder
+            FaultInjectionRule readSessionUnavailableRulePrimaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInPrimaryRegion)
                 .result(badSessionTokenServerErrorResult)
                 .duration(Duration.ofSeconds(30))
                 .build();
 
             // limit hit count to 3 in region 2 / west us
-            FaultInjectionRule badSessionTokenRuleSecondaryRegion = badSessionTokenRuleBuilder
+            FaultInjectionRule readSessionUnavailableRuleSecondaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInSecondaryRegion)
                 .result(badSessionTokenServerErrorResult)
                 .duration(Duration.ofSeconds(30))
@@ -113,7 +117,7 @@ public class CosmosConsoleMeterRegistryExample {
 
             CosmosFaultInjectionHelper
                 .configureFaultInjectionRules(containerForClientWithPreferredRegions,
-                    Arrays.asList(badSessionTokenRulePrimaryRegion, badSessionTokenRuleSecondaryRegion))
+                    Arrays.asList(readSessionUnavailableRulePrimaryRegion, readSessionUnavailableRuleSecondaryRegion))
                 .block();
 
             int threadCount = 1;
@@ -137,7 +141,119 @@ public class CosmosConsoleMeterRegistryExample {
                     containerForClientWithPreferredRegions,
                     idAndPkValPair,
                     isStopped,
-                    endToEndOperationLatencyPolicyConfig)
+                    endToEndOperationLatencyPolicyConfig,
+                    null)
+                );
+            }
+
+            try {
+                executorService.awaitTermination(30, TimeUnit.SECONDS);
+                executorService.shutdown();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+        } catch (Exception e) {
+            logger.error("Error occurred", e);
+        } finally {
+            System.clearProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED");
+            clientWithPreferredRegions.close();
+        }
+    }
+
+    public static void createReadSessionNotAvailableThroughInvalidSessionToken() {
+        System.setProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED", String.valueOf(2));
+
+        MeterRegistry meterRegistry = createMeterRegistry();
+        CosmosMicrometerMetricsOptions inputMetricOptions = createMicrometerMetricsOptions(meterRegistry);
+        CosmosClientTelemetryConfig clientTelemetryConfig = createClientTelemetryConfig(inputMetricOptions);
+
+        CosmosAsyncClient clientWithPreferredRegions = null;
+
+        try {
+            clientWithPreferredRegions = buildCosmosClient(clientTelemetryConfig);
+
+            // setup db and container and pass their ids accordingly
+            // ensure the container has a partition key definition of /mypk
+            CosmosAsyncContainer containerForClientWithPreferredRegions = clientWithPreferredRegions
+                .getDatabase("test-db")
+                .getContainer("test-container");
+
+            String documentId = UUID.randomUUID().toString();
+            Pair<String, String> idAndPkValPair = new ImmutablePair<>(documentId, documentId);
+
+            TestItem createdItem = new TestItem(documentId, documentId);
+            containerForClientWithPreferredRegions.createItem(createdItem).block();
+
+            FaultInjectionRuleBuilder badSessionTokenRuleBuilder = new FaultInjectionRuleBuilder("serverErrorRule-bad"
+                + "-session-token-" + UUID.randomUUID());
+
+            // inject 404/1002s in two regions
+            // configure regions accordingly
+            FaultInjectionCondition faultInjectionConditionForReadsInPrimaryRegion =
+                new FaultInjectionConditionBuilder()
+                    .operationType(FaultInjectionOperationType.READ_ITEM)
+                    .connectionType(FaultInjectionConnectionType.DIRECT)
+                    .region("East US")
+                    .build();
+
+            FaultInjectionCondition faultInjectionConditionForReadsInSecondaryRegion =
+                new FaultInjectionConditionBuilder()
+                    .operationType(FaultInjectionOperationType.READ_ITEM)
+                    .connectionType(FaultInjectionConnectionType.DIRECT)
+                    .region("West US")
+                    .build();
+
+            FaultInjectionServerErrorResult badSessionTokenServerErrorResult = FaultInjectionResultBuilders
+                .getResultBuilder(FaultInjectionServerErrorType.READ_SESSION_NOT_AVAILABLE)
+                .build();
+
+            // longer fault injection in region 1 / east us
+            FaultInjectionRule readSessionUnavailableRulePrimaryRegion = badSessionTokenRuleBuilder
+                .condition(faultInjectionConditionForReadsInPrimaryRegion)
+                .result(badSessionTokenServerErrorResult)
+                .duration(Duration.ofSeconds(30))
+                .build();
+
+            // limit hit count to 3 in region 2 / west us
+            FaultInjectionRule readSessionUnavailableRuleSecondaryRegion = badSessionTokenRuleBuilder
+                .condition(faultInjectionConditionForReadsInSecondaryRegion)
+                .result(badSessionTokenServerErrorResult)
+                .duration(Duration.ofSeconds(30))
+                .build();
+
+            CosmosFaultInjectionHelper
+                .configureFaultInjectionRules(containerForClientWithPreferredRegions,
+                    Arrays.asList(readSessionUnavailableRulePrimaryRegion, readSessionUnavailableRuleSecondaryRegion))
+                .block();
+
+            int threadCount = 1;
+
+            ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+            AtomicBoolean isStopped = new AtomicBoolean(false);
+
+            Duration workloadExecutionDuration = Duration.ofSeconds(30);
+
+            Flux
+                .just(1)
+                .delayElements(workloadExecutionDuration)
+                .doOnComplete(() -> isStopped.compareAndSet(false, true))
+                .subscribe();
+
+            // configure / disable endToEnd timeout accordingly
+            CosmosEndToEndOperationLatencyPolicyConfig endToEndOperationLatencyPolicyConfig =
+                new CosmosEndToEndOperationLatencyPolicyConfigBuilder(Duration.ofSeconds(2)).build();
+
+            // pass invalid session token accordingly
+            String invalidSessionToken = "0:0#909#7=10000";
+
+            for (int i = 0; i < threadCount; i++) {
+                executorService.submit(() -> execute(
+                    containerForClientWithPreferredRegions,
+                    idAndPkValPair,
+                    isStopped,
+                    endToEndOperationLatencyPolicyConfig,
+                    invalidSessionToken)
                 );
             }
 
@@ -152,40 +268,38 @@ public class CosmosConsoleMeterRegistryExample {
             logger.error("Error occurred", e);
         } finally {
 
-            // check if we have 404/1002s for all replicas in region 1 / east us
-            // check if we have 404/1002s for 3 replicas in region 2 / west us
-            // check if we have 201/0 in east us
-            // check if we have 200/0 in west us
-            //            for (Meter meter : meterRegistry.getMeters()) {
-            //                logger.info(meter.getId().toString());
-            //            }
-
             System.clearProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED");
             clientWithPreferredRegions.close();
         }
-    }
-
-    public static void createReadSessionNotAvailableThroughInvalidSessionToken() {
     }
 
     private static void execute(
         CosmosAsyncContainer container,
         Pair<String, String> idAndPkValPair,
         AtomicBoolean isStopped,
-        CosmosEndToEndOperationLatencyPolicyConfig endToEndOperationLatencyPolicyConfig) {
+        CosmosEndToEndOperationLatencyPolicyConfig endToEndOperationLatencyPolicyConfig,
+        String invalidSessionToken) {
 
         while (!isStopped.get()) {
             try {
                 CosmosItemRequestOptions itemRequestOptions = new CosmosItemRequestOptions();
-                itemRequestOptions.setCosmosEndToEndOperationLatencyPolicyConfig(endToEndOperationLatencyPolicyConfig);
+
+                if (endToEndOperationLatencyPolicyConfig != null) {
+                    itemRequestOptions.setCosmosEndToEndOperationLatencyPolicyConfig(endToEndOperationLatencyPolicyConfig);
+                }
+
+                if (!invalidSessionToken.isEmpty()) {
+                    itemRequestOptions.setSessionToken(invalidSessionToken);
+                }
+
                 CosmosItemResponse<ObjectNode> response = container.readItem(idAndPkValPair.getLeft(),
                     new PartitionKey(idAndPkValPair.getRight()), itemRequestOptions, ObjectNode.class).block();
             } catch (Exception e) {
+                // add more logging
                 if (e instanceof CosmosException) {
                     CosmosException cosmosException = Utils.as(e, CosmosException.class);
-                    if (cosmosException.getSubStatusCode() == HttpConstants.SubStatusCodes.CLIENT_OPERATION_TIMEOUT) {
-                        // logger.error(e.toString());
-                    }
+                } else {
+
                 }
             }
         }
@@ -198,6 +312,7 @@ public class CosmosConsoleMeterRegistryExample {
 
     private static CosmosAsyncClient buildCosmosClient(CosmosClientTelemetryConfig clientTelemetryConfig) {
 
+        // configure preferred regions accordingly
         List<String> preferredRegions = Arrays.asList("East US", "West US");
 
         return new CosmosClientBuilder()
