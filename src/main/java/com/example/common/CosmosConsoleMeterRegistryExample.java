@@ -133,15 +133,12 @@ public class CosmosConsoleMeterRegistryExample {
                 .doOnComplete(() -> isStopped.compareAndSet(false, true))
                 .subscribe();
 
-            CosmosEndToEndOperationLatencyPolicyConfig endToEndOperationLatencyPolicyConfig =
-                new CosmosEndToEndOperationLatencyPolicyConfigBuilder(Duration.ofSeconds(2)).build();
-
             for (int i = 0; i < threadCount; i++) {
                 executorService.submit(() -> execute(
                     containerForClientWithPreferredRegions,
                     idAndPkValPair,
                     isStopped,
-                    endToEndOperationLatencyPolicyConfig,
+                    null,
                     null)
                 );
             }
@@ -185,47 +182,6 @@ public class CosmosConsoleMeterRegistryExample {
             TestItem createdItem = new TestItem(documentId, documentId);
             containerForClientWithPreferredRegions.createItem(createdItem).block();
 
-            FaultInjectionRuleBuilder badSessionTokenRuleBuilder = new FaultInjectionRuleBuilder("serverErrorRule-bad"
-                + "-session-token-" + UUID.randomUUID());
-
-            // inject 404/1002s in two regions
-            // configure regions accordingly
-            FaultInjectionCondition faultInjectionConditionForReadsInPrimaryRegion =
-                new FaultInjectionConditionBuilder()
-                    .operationType(FaultInjectionOperationType.READ_ITEM)
-                    .connectionType(FaultInjectionConnectionType.DIRECT)
-                    .region("East US")
-                    .build();
-
-            FaultInjectionCondition faultInjectionConditionForReadsInSecondaryRegion =
-                new FaultInjectionConditionBuilder()
-                    .operationType(FaultInjectionOperationType.READ_ITEM)
-                    .connectionType(FaultInjectionConnectionType.DIRECT)
-                    .region("West US")
-                    .build();
-
-            FaultInjectionServerErrorResult badSessionTokenServerErrorResult = FaultInjectionResultBuilders
-                .getResultBuilder(FaultInjectionServerErrorType.READ_SESSION_NOT_AVAILABLE)
-                .build();
-
-            // sustained fault injection
-            FaultInjectionRule readSessionUnavailableRulePrimaryRegion = badSessionTokenRuleBuilder
-                .condition(faultInjectionConditionForReadsInPrimaryRegion)
-                .result(badSessionTokenServerErrorResult)
-                .duration(Duration.ofSeconds(30))
-                .build();
-
-            // sustained fault injection
-            FaultInjectionRule readSessionUnavailableRuleSecondaryRegion = badSessionTokenRuleBuilder
-                .condition(faultInjectionConditionForReadsInSecondaryRegion)
-                .result(badSessionTokenServerErrorResult)
-                .duration(Duration.ofSeconds(30))
-                .build();
-
-            CosmosFaultInjectionHelper
-                .configureFaultInjectionRules(containerForClientWithPreferredRegions,
-                    Arrays.asList(readSessionUnavailableRulePrimaryRegion, readSessionUnavailableRuleSecondaryRegion))
-                .block();
 
             int threadCount = 1;
 
@@ -240,10 +196,6 @@ public class CosmosConsoleMeterRegistryExample {
                 .doOnComplete(() -> isStopped.compareAndSet(false, true))
                 .subscribe();
 
-            // configure / disable endToEnd timeout accordingly
-            CosmosEndToEndOperationLatencyPolicyConfig endToEndOperationLatencyPolicyConfig =
-                new CosmosEndToEndOperationLatencyPolicyConfigBuilder(Duration.ofSeconds(2)).build();
-
             // pass invalid session token accordingly
             String invalidSessionToken = "0:0#909#7=10000";
 
@@ -252,7 +204,7 @@ public class CosmosConsoleMeterRegistryExample {
                     containerForClientWithPreferredRegions,
                     idAndPkValPair,
                     isStopped,
-                    endToEndOperationLatencyPolicyConfig,
+                    null,
                     invalidSessionToken)
                 );
             }
