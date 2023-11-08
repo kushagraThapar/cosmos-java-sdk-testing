@@ -11,11 +11,10 @@ import com.azure.cosmos.models.TriggerType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.SimpleDateFormat;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Date;
 import java.util.UUID;
 
 public class CosmosTriggerExample {
@@ -55,14 +54,14 @@ public class CosmosTriggerExample {
 
     private static TestItem getTestItem() {
         TestItem testItem = new TestItem(UUID.randomUUID().toString(), UUID.randomUUID().toString());
-        OffsetDateTime offsetDateTime = OffsetDateTime.now();
         ZonedDateTime zonedDateTime = ZonedDateTime.now();
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+        OffsetDateTime offsetDateTime = OffsetDateTime.of(2023, 3, 31, 14, 12, 27, 800000000, ZoneOffset.ofHours(2));
+        String formattedDate = offsetDateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         testItem.setOffsetDateTime(offsetDateTime);
         testItem.setZonedDateTime(zonedDateTime);
-        testItem.setOffsetDateTimeString(DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(offsetDateTime));
+        testItem.setOffsetDateTimeString(formattedDate);
         testItem.setZonedDateTimeString(DateTimeFormatter.ISO_ZONED_DATE_TIME.format(zonedDateTime));
-        testItem.setDateTimeStringWithTrailingZeros(sdf.format(new Date()));
+        testItem.setDateTimeStringWithTrailingZeros(offsetDateTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
         logger.info("Test item is : {}", testItem);
         return testItem;
     }
