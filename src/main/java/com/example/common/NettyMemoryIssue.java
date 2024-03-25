@@ -17,11 +17,11 @@ public class NettyMemoryIssue {
     public static void main(String[] args) throws InterruptedException {
 
         CosmosAsyncClient cosmosClient = new CosmosClientBuilder()
-                .endpoint(Configurations.endpoint)
-                .key(Configurations.key)
-                .contentResponseOnWriteEnabled(true)
-                .gatewayMode()
-                .buildAsyncClient();
+            .endpoint(Configurations.endpoint)
+            .key(Configurations.key)
+            .contentResponseOnWriteEnabled(true)
+            .gatewayMode()
+            .buildAsyncClient();
 
         cosmosClient.createDatabaseIfNotExists("testdb").block();
         CosmosAsyncDatabase testdb = cosmosClient.getDatabase("testdb");
@@ -33,17 +33,18 @@ public class NettyMemoryIssue {
             logger.info("Container does not exist");
         }
 
-        testdb.createContainerIfNotExists(cosmosContainerProperties, ThroughputProperties.createManualThroughput(100000)).block();
+        testdb.createContainerIfNotExists(cosmosContainerProperties,
+            ThroughputProperties.createManualThroughput(100000)).block();
         CosmosAsyncContainer testcontainer = testdb.getContainer("testcontainer");
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 10000; i++) {
             logger.info("Creating item " + i);
             testcontainer.createItem(new TestItem("id" + i, "pk" + i), new CosmosItemRequestOptions())
-                    .subscribe(response -> {
-                        logger.info("Item created " + response.getItem().getId());
-                    }, throwable -> {
-                        logger.error("Error creating item", throwable);
-                    });
+                         .subscribe(response -> {
+                             logger.info("Item created " + response.getItem().getId());
+                         }, throwable -> {
+                             logger.error("Error creating item", throwable);
+                         });
         }
 
         Thread.sleep(1000000);
