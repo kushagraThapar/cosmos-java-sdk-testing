@@ -3,6 +3,7 @@ package com.example.common;
 import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosContainer;
+import com.azure.cosmos.implementation.TestConfigurations;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.FeedResponse;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -14,17 +15,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static com.example.common.Configurations.endpoint;
-import static com.example.common.Configurations.key;
-
 public class QueryThrottlingHangIssue {
 
     private final static Logger logger = LoggerFactory.getLogger(QueryThrottlingHangIssue.class);
 
     public static void main(String[] args) {
         CosmosClient cosmosClient = new CosmosClientBuilder()
-            .endpoint(endpoint)
-            .key(key)
+            .endpoint(TestConfigurations.HOST)
+            .key(TestConfigurations.MASTER_KEY)
             .buildClient();
 
         CosmosContainer container = cosmosClient.getDatabase("testDB").getContainer("testContainer");

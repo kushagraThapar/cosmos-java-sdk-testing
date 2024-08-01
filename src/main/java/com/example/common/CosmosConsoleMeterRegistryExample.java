@@ -1,15 +1,8 @@
 package com.example.common;
 
-import com.azure.cosmos.ConsistencyLevel;
-import com.azure.cosmos.CosmosAsyncClient;
-import com.azure.cosmos.CosmosAsyncContainer;
-import com.azure.cosmos.CosmosClientBuilder;
-import com.azure.cosmos.CosmosEndToEndOperationLatencyPolicyConfig;
-import com.azure.cosmos.CosmosEndToEndOperationLatencyPolicyConfigBuilder;
-import com.azure.cosmos.CosmosException;
-import com.azure.cosmos.CosmosRegionSwitchHint;
-import com.azure.cosmos.SessionRetryOptionsBuilder;
+import com.azure.cosmos.*;
 import com.azure.cosmos.implementation.HttpConstants;
+import com.azure.cosmos.implementation.TestConfigurations;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.models.CosmosClientTelemetryConfig;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
@@ -17,6 +10,7 @@ import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.CosmosMetricCategory;
 import com.azure.cosmos.models.CosmosMetricTagName;
 import com.azure.cosmos.models.CosmosMicrometerMetricsOptions;
+import com.azure.cosmos.models.CosmosResponse;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.test.faultinjection.CosmosFaultInjectionHelper;
 import com.azure.cosmos.test.faultinjection.FaultInjectionCondition;
@@ -48,14 +42,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class CosmosConsoleMeterRegistryExample {
 
     private static final Logger logger = LoggerFactory.getLogger(CosmosConsoleMeterRegistryExample.class);
-
+    private static final String masterKey = "";
     public static void main(String[] args) {
         createReadSessionNotAvailableThroughFaultInjection();
-        createReadSessionNotAvailableThroughInvalidSessionToken();
+        //        createReadSessionNotAvailableThroughInvalidSessionToken();
     }
 
     public static void createReadSessionNotAvailableThroughFaultInjection() {
-        System.setProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED", String.valueOf(2));
+        System.setProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED", String.valueOf(1));
 
         MeterRegistry meterRegistry = createMeterRegistry();
         CosmosMicrometerMetricsOptions inputMetricOptions = createMicrometerMetricsOptions(meterRegistry);
@@ -76,7 +70,7 @@ public class CosmosConsoleMeterRegistryExample {
             Pair<String, String> idAndPkValPair = new ImmutablePair<>(documentId, documentId);
 
             TestItem createdItem = new TestItem(documentId, documentId);
-            containerForClientWithPreferredRegions.createItem(createdItem).block();
+            CosmosItemResponse<TestItem> writeResponse = containerForClientWithPreferredRegions.createItem(createdItem).block();
 
             FaultInjectionRuleBuilder badSessionTokenRuleBuilder = new FaultInjectionRuleBuilder("serverErrorRule-bad"
                 + "-session-token-" + UUID.randomUUID());
@@ -105,14 +99,14 @@ public class CosmosConsoleMeterRegistryExample {
             FaultInjectionRule readSessionUnavailableRulePrimaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInPrimaryRegion)
                 .result(badSessionTokenServerErrorResult)
-                .duration(Duration.ofSeconds(30))
+                .duration(Duration.ofSeconds(120))
                 .build();
 
             // sustained fault injection
             FaultInjectionRule readSessionUnavailableRuleSecondaryRegion = badSessionTokenRuleBuilder
                 .condition(faultInjectionConditionForReadsInSecondaryRegion)
                 .result(badSessionTokenServerErrorResult)
-                .duration(Duration.ofSeconds(30))
+                .duration(Duration.ofSeconds(120))
                 .build();
 
             CosmosFaultInjectionHelper
@@ -132,14 +126,17 @@ public class CosmosConsoleMeterRegistryExample {
                 .delayElements(workloadExecutionDuration)
                 .doOnComplete(() -> isStopped.compareAndSet(false, true))
                 .subscribe();
-
+            ThresholdBasedAvailabilityStrategy thresholdStrategy = new ThresholdBasedAvailabilityStrategy();
+            CosmosEndToEndOperationLatencyPolicyConfig endToEndOperationLatencyPolicyConfig =
+                new CosmosEndToEndOperationLatencyPolicyConfigBuilder(Duration.ofSeconds(120)).
+                    enable(true).availabilityStrategy(thresholdStrategy).build();
             for (int i = 0; i < threadCount; i++) {
                 executorService.submit(() -> execute(
                     containerForClientWithPreferredRegions,
                     idAndPkValPair,
                     isStopped,
-                    null,
-                    null)
+                    endToEndOperationLatencyPolicyConfig,
+                    writeResponse.getSessionToken())
                 );
             }
 
@@ -159,7 +156,7 @@ public class CosmosConsoleMeterRegistryExample {
     }
 
     public static void createReadSessionNotAvailableThroughInvalidSessionToken() {
-        System.setProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED", String.valueOf(2));
+        System.setProperty("COSMOS.MAX_RETRIES_IN_LOCAL_REGION_WHEN_REMOTE_REGION_PREFERRED", String.valueOf(1));
 
         MeterRegistry meterRegistry = createMeterRegistry();
         CosmosMicrometerMetricsOptions inputMetricOptions = createMicrometerMetricsOptions(meterRegistry);
@@ -173,8 +170,8 @@ public class CosmosConsoleMeterRegistryExample {
             // setup db and container and pass their ids accordingly
             // ensure the container has a partition key definition of /mypk
             CosmosAsyncContainer containerForClientWithPreferredRegions = clientWithPreferredRegions
-                .getDatabase("test-db")
-                .getContainer("test-container");
+                .getDatabase("CosmosSDKMetrics")
+                .getContainer("DashboardTest");
 
             String documentId = UUID.randomUUID().toString();
             Pair<String, String> idAndPkValPair = new ImmutablePair<>(documentId, documentId);
@@ -242,16 +239,19 @@ public class CosmosConsoleMeterRegistryExample {
 
                 if (invalidSessionToken != null && !invalidSessionToken.isEmpty()) {
                     itemRequestOptions.setSessionToken(invalidSessionToken);
+                    System.out.println("Set session token " + invalidSessionToken);
                 }
 
                 CosmosItemResponse<ObjectNode> response = container.readItem(idAndPkValPair.getLeft(),
                     new PartitionKey(idAndPkValPair.getRight()), itemRequestOptions, ObjectNode.class).block();
+                System.out.println(response.getDiagnostics());
             } catch (Exception e) {
                 // add more logging
+                logger.error("Caught error", e);
                 if (e instanceof CosmosException) {
                     CosmosException cosmosException = Utils.as(e, CosmosException.class);
                 } else {
-
+                    logger.error("Caught not cosmos error", e);
                 }
             }
         }
@@ -268,8 +268,8 @@ public class CosmosConsoleMeterRegistryExample {
         List<String> preferredRegions = Arrays.asList("East US", "West US");
 
         return new CosmosClientBuilder()
-            .endpoint(Configurations.endpoint)
-            .key(Configurations.key)
+            .endpoint(TestConfigurations.HOST)
+            .key(TestConfigurations.MASTER_KEY)
             .consistencyLevel(ConsistencyLevel.SESSION)
             .preferredRegions(preferredRegions)
             .sessionRetryOptions(new SessionRetryOptionsBuilder()

@@ -6,6 +6,7 @@ import com.azure.cosmos.CosmosAsyncDatabase;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosDiagnostics;
 import com.azure.cosmos.DirectConnectionConfig;
+import com.azure.cosmos.implementation.TestConfigurations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.scheduler.Schedulers;
@@ -18,8 +19,8 @@ public class CosmosCreatePerformanceTest {
 
     public static void main(String[] args) throws InterruptedException {
         CosmosAsyncClient cosmosAsyncClient = new CosmosClientBuilder()
-            .endpoint(Configurations.endpoint)
-            .key(Configurations.key)
+            .endpoint(TestConfigurations.HOST)
+            .key(TestConfigurations.MASTER_KEY)
             .contentResponseOnWriteEnabled(true)
             .directMode(DirectConnectionConfig.getDefaultConfig().setMaxConnectionsPerEndpoint(1))
             .buildAsyncClient();
