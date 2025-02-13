@@ -70,9 +70,6 @@ public class ErrorCallbackTesting {
 
             obs = obs.doOnNext(cosmosItemResponse -> {
                 logger.info("2nd response is : {}", cosmosItemResponse);
-            }).onErrorResume(error -> {
-                logger.error("2nd onErrorResume - error is : {}", error.getMessage());
-                return Mono.error(error);
             }).flatMap(r -> Mono.just(r));
             obs.block();
         } catch (Exception e) {
