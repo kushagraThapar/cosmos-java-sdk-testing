@@ -31,7 +31,7 @@ public class CosmosDRDrillTesting {
     private static final String PARTITION_KEY_PATH = "/pk";
     private static final String TOTAL_OPERATIONS = System.getProperty("TOTAL_OPERATIONS",
         StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("TOTAL_OPERATIONS")), "10000"));
+            System.getenv().get("TOTAL_OPERATIONS")), "100000"));
     private static final int TOTAL_NUMBER_OF_OPERATIONS = Integer.parseInt(TOTAL_OPERATIONS);
 
     private static final ScheduledThreadPoolExecutor scheduledExecutor =
