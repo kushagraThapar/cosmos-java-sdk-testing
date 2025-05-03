@@ -14,9 +14,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class CosmosDRDrillTesting {
 
@@ -32,7 +34,11 @@ public class CosmosDRDrillTesting {
     private static final String TOTAL_OPERATIONS = System.getProperty("TOTAL_OPERATIONS",
         StringUtils.defaultString(Strings.emptyToNull(
             System.getenv().get("TOTAL_OPERATIONS")), "100000"));
+    private static final String CONNECTION_MODE_AS_STRING = System.getProperty("CONNECTION_MODE",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("CONNECTION_MODE")), "DIRECT")).toUpperCase(Locale.ROOT);
     private static final int TOTAL_NUMBER_OF_OPERATIONS = Integer.parseInt(TOTAL_OPERATIONS);
+
 
     private static final ScheduledThreadPoolExecutor scheduledExecutor =
         new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
@@ -42,7 +48,22 @@ public class CosmosDRDrillTesting {
     private static CosmosAsyncContainer cosmosAsyncContainer;
 
     public static void main(String[] args) {
-        cosmosAsyncClient = new CosmosClientBuilder()
+
+        CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
+                .endpoint(Configurations.endpoint)
+                .key(Configurations.key)
+                .contentResponseOnWriteEnabled(true);
+
+        if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
+            cosmosClientBuilder = cosmosClientBuilder.directMode();
+        } else if (CONNECTION_MODE_AS_STRING.equals("GATEWAY")) {
+            cosmosClientBuilder = cosmosClientBuilder.gatewayMode();
+        } else {
+            logger.error("Invalid connection mode: {}", CONNECTION_MODE_AS_STRING);
+            return;
+        }
+
+        cosmosAsyncClient = cosmosClientBuilder
             .endpoint(Configurations.endpoint)
             .key(Configurations.key)
             .contentResponseOnWriteEnabled(true)
@@ -60,7 +81,7 @@ public class CosmosDRDrillTesting {
 
     private static void startWorkload() {
         while (true) {
-            int randomOperation = new Random().nextInt(4);
+            int randomOperation = ThreadLocalRandom.current().nextInt(4);
             switch (randomOperation) {
                 case 1:
                     upsertItem();
@@ -78,7 +99,7 @@ public class CosmosDRDrillTesting {
 
     private static void upsertItem() {
         try {
-            int finalI = new Random().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
             logger.info("upsert item: {}", finalI);
             scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(getItem(finalI, finalI),
                 new CosmosItemRequestOptions()).block());
@@ -89,7 +110,7 @@ public class CosmosDRDrillTesting {
 
     private static void readItem() {
         try {
-            int finalI = new Random().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
             logger.info("read item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
             scheduledExecutor.execute(() -> cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()),
@@ -101,7 +122,7 @@ public class CosmosDRDrillTesting {
 
     private static void queryItem() {
         try {
-            int finalI = new Random().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
             logger.info("query item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
             String query = "select * from c where c.id=@id and c.pk=@pk";
