@@ -1,5 +1,6 @@
 package com.example.common;
 
+import com.azure.core.credential.TokenCredential;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosAsyncDatabase;
@@ -12,7 +13,7 @@ import com.azure.cosmos.models.SqlParameter;
 import com.azure.cosmos.models.SqlQuerySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import com.azure.identity.DefaultAzureCredentialBuilder;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Random;
@@ -39,6 +40,28 @@ public class CosmosDRDrillTesting {
             System.getenv().get("CONNECTION_MODE")), "DIRECT")).toUpperCase(Locale.ROOT);
     private static final int TOTAL_NUMBER_OF_OPERATIONS = Integer.parseInt(TOTAL_OPERATIONS);
 
+    private static final boolean IS_MANAGED_IDENTITY_ENABLED = Boolean.parseBoolean(
+        System.getProperty("IS_MANAGED_IDENTITY_ENABLED",
+            StringUtils.defaultString(Strings.emptyToNull(
+                System.getenv().get("IS_MANAGED_IDENTITY_ENABLED")), "false")));
+
+    private static final String AAD_LOGIN_ENDPOINT = System.getProperty("AAD_LOGIN_ENDPOINT",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("AAD_LOGIN_ENDPOINT")), "https://login.microsoftonline.com/"));
+
+    private static final String AAD_MANAGED_IDENTITY_ID = System.getProperty("AAD_MANAGED_IDENTITY_ID",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("AAD_MANAGED_IDENTITY_ID")), null));
+
+    private static final String AAD_TENANT_ID = System.getProperty("AAD_TENANT_ID",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("AAD_TENANT_ID")), null));
+
+    private static final TokenCredential CREDENTIAL = new DefaultAzureCredentialBuilder()
+            .managedIdentityClientId(AAD_MANAGED_IDENTITY_ID)
+            .authorityHost(AAD_LOGIN_ENDPOINT)
+            .tenantId(AAD_TENANT_ID)
+            .build();
 
     private static final ScheduledThreadPoolExecutor scheduledExecutor =
         new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
@@ -50,8 +73,7 @@ public class CosmosDRDrillTesting {
     public static void main(String[] args) {
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
-                .endpoint(Configurations.endpoint)
-                .key(Configurations.key)
+
                 .contentResponseOnWriteEnabled(true);
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
@@ -63,9 +85,17 @@ public class CosmosDRDrillTesting {
             return;
         }
 
+        if (IS_MANAGED_IDENTITY_ENABLED) {
+            logger.info("Using managed identity based authentication");
+            cosmosClientBuilder = cosmosClientBuilder.credential(CREDENTIAL);
+        } else {
+            logger.info("Using key-based authentication");
+            cosmosClientBuilder = cosmosClientBuilder
+                    .endpoint(Configurations.endpoint)
+                    .key(Configurations.key);
+        }
+
         cosmosAsyncClient = cosmosClientBuilder
-            .endpoint(Configurations.endpoint)
-            .key(Configurations.key)
             .contentResponseOnWriteEnabled(true)
             .buildAsyncClient();
 
