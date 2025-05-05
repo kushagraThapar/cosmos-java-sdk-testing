@@ -1,5 +1,6 @@
 package com.example.common;
 
+import com.azure.core.credential.TokenCredential;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosAsyncDatabase;
@@ -12,11 +13,12 @@ import com.azure.cosmos.models.SqlParameter;
 import com.azure.cosmos.models.SqlQuerySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import com.azure.identity.DefaultAzureCredentialBuilder;
 import java.util.Arrays;
-import java.util.Random;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class CosmosDRDrillTesting {
 
@@ -29,10 +31,36 @@ public class CosmosDRDrillTesting {
         StringUtils.defaultString(Strings.emptyToNull(
             System.getenv().get("CONTAINER_ID")), "MigrationContainer"));
     private static final String PARTITION_KEY_PATH = "/pk";
-    private static final String TOTAL_OPERATIONS = System.getProperty("TOTAL_OPERATIONS",
+    private static final String TOTAL_DOCUMENTS = System.getProperty("TOTAL_DOCUMENTS",
         StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("TOTAL_OPERATIONS")), "100000"));
-    private static final int TOTAL_NUMBER_OF_OPERATIONS = Integer.parseInt(TOTAL_OPERATIONS);
+            System.getenv().get("TOTAL_DOCUMENTS")), "100000"));
+    private static final String CONNECTION_MODE_AS_STRING = System.getProperty("CONNECTION_MODE",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("CONNECTION_MODE")), "DIRECT")).toUpperCase(Locale.ROOT);
+    private static final int TOTAL_NUMBER_OF_DOCUMENTS = Integer.parseInt(TOTAL_DOCUMENTS);
+
+    private static final boolean IS_MANAGED_IDENTITY_ENABLED = Boolean.parseBoolean(
+        System.getProperty("IS_MANAGED_IDENTITY_ENABLED",
+            StringUtils.defaultString(Strings.emptyToNull(
+                System.getenv().get("IS_MANAGED_IDENTITY_ENABLED")), "false")));
+
+    private static final String AAD_LOGIN_ENDPOINT = System.getProperty("AAD_LOGIN_ENDPOINT",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("AAD_LOGIN_ENDPOINT")), "https://login.microsoftonline.com/"));
+
+    private static final String AAD_MANAGED_IDENTITY_ID = System.getProperty("AAD_MANAGED_IDENTITY_ID",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("AAD_MANAGED_IDENTITY_ID")), null));
+
+    private static final String AAD_TENANT_ID = System.getProperty("AAD_TENANT_ID",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("AAD_TENANT_ID")), null));
+
+    private static final TokenCredential CREDENTIAL = new DefaultAzureCredentialBuilder()
+            .managedIdentityClientId(AAD_MANAGED_IDENTITY_ID)
+            .authorityHost(AAD_LOGIN_ENDPOINT)
+            .tenantId(AAD_TENANT_ID)
+            .build();
 
     private static final ScheduledThreadPoolExecutor scheduledExecutor =
         new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
@@ -42,9 +70,31 @@ public class CosmosDRDrillTesting {
     private static CosmosAsyncContainer cosmosAsyncContainer;
 
     public static void main(String[] args) {
-        cosmosAsyncClient = new CosmosClientBuilder()
-            .endpoint(Configurations.endpoint)
-            .key(Configurations.key)
+
+        CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
+
+                .contentResponseOnWriteEnabled(true);
+
+        if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
+            cosmosClientBuilder = cosmosClientBuilder.directMode();
+        } else if (CONNECTION_MODE_AS_STRING.equals("GATEWAY")) {
+            cosmosClientBuilder = cosmosClientBuilder.gatewayMode();
+        } else {
+            logger.error("Invalid connection mode: {}", CONNECTION_MODE_AS_STRING);
+            return;
+        }
+
+        if (IS_MANAGED_IDENTITY_ENABLED) {
+            logger.info("Using managed identity based authentication");
+            cosmosClientBuilder = cosmosClientBuilder.credential(CREDENTIAL);
+        } else {
+            logger.info("Using key-based authentication");
+            cosmosClientBuilder = cosmosClientBuilder
+                    .endpoint(Configurations.endpoint)
+                    .key(Configurations.key);
+        }
+
+        cosmosAsyncClient = cosmosClientBuilder
             .contentResponseOnWriteEnabled(true)
             .buildAsyncClient();
 
@@ -60,7 +110,7 @@ public class CosmosDRDrillTesting {
 
     private static void startWorkload() {
         while (true) {
-            int randomOperation = new Random().nextInt(4);
+            int randomOperation = ThreadLocalRandom.current().nextInt(4);
             switch (randomOperation) {
                 case 1:
                     upsertItem();
@@ -78,7 +128,7 @@ public class CosmosDRDrillTesting {
 
     private static void upsertItem() {
         try {
-            int finalI = new Random().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("upsert item: {}", finalI);
             scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(getItem(finalI, finalI),
                 new CosmosItemRequestOptions()).block());
@@ -89,7 +139,7 @@ public class CosmosDRDrillTesting {
 
     private static void readItem() {
         try {
-            int finalI = new Random().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("read item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
             scheduledExecutor.execute(() -> cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()),
@@ -101,7 +151,7 @@ public class CosmosDRDrillTesting {
 
     private static void queryItem() {
         try {
-            int finalI = new Random().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("query item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
             String query = "select * from c where c.id=@id and c.pk=@pk";
@@ -116,7 +166,7 @@ public class CosmosDRDrillTesting {
 
     private static void insertData() {
         logger.info("Inserting data...");
-        for (int i = 0; i < TOTAL_NUMBER_OF_OPERATIONS; i++) {
+        for (int i = 0; i < TOTAL_NUMBER_OF_DOCUMENTS; i++) {
             int finalI = i;
             scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(getItem(finalI, finalI),
                 new CosmosItemRequestOptions()).block());
