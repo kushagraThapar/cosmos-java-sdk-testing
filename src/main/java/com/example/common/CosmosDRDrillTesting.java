@@ -16,7 +16,6 @@ import org.slf4j.LoggerFactory;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import java.util.Arrays;
 import java.util.Locale;
-import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
@@ -32,13 +31,13 @@ public class CosmosDRDrillTesting {
         StringUtils.defaultString(Strings.emptyToNull(
             System.getenv().get("CONTAINER_ID")), "MigrationContainer"));
     private static final String PARTITION_KEY_PATH = "/pk";
-    private static final String TOTAL_OPERATIONS = System.getProperty("TOTAL_OPERATIONS",
+    private static final String TOTAL_DOCUMENTS = System.getProperty("TOTAL_DOCUMENTS",
         StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("TOTAL_OPERATIONS")), "100000"));
+            System.getenv().get("TOTAL_DOCUMENTS")), "100000"));
     private static final String CONNECTION_MODE_AS_STRING = System.getProperty("CONNECTION_MODE",
         StringUtils.defaultString(Strings.emptyToNull(
             System.getenv().get("CONNECTION_MODE")), "DIRECT")).toUpperCase(Locale.ROOT);
-    private static final int TOTAL_NUMBER_OF_OPERATIONS = Integer.parseInt(TOTAL_OPERATIONS);
+    private static final int TOTAL_NUMBER_OF_DOCUMENTS = Integer.parseInt(TOTAL_DOCUMENTS);
 
     private static final boolean IS_MANAGED_IDENTITY_ENABLED = Boolean.parseBoolean(
         System.getProperty("IS_MANAGED_IDENTITY_ENABLED",
@@ -129,7 +128,7 @@ public class CosmosDRDrillTesting {
 
     private static void upsertItem() {
         try {
-            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("upsert item: {}", finalI);
             scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(getItem(finalI, finalI),
                 new CosmosItemRequestOptions()).block());
@@ -140,7 +139,7 @@ public class CosmosDRDrillTesting {
 
     private static void readItem() {
         try {
-            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("read item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
             scheduledExecutor.execute(() -> cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()),
@@ -152,7 +151,7 @@ public class CosmosDRDrillTesting {
 
     private static void queryItem() {
         try {
-            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_OPERATIONS);
+            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("query item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
             String query = "select * from c where c.id=@id and c.pk=@pk";
@@ -167,7 +166,7 @@ public class CosmosDRDrillTesting {
 
     private static void insertData() {
         logger.info("Inserting data...");
-        for (int i = 0; i < TOTAL_NUMBER_OF_OPERATIONS; i++) {
+        for (int i = 0; i < TOTAL_NUMBER_OF_DOCUMENTS; i++) {
             int finalI = i;
             scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(getItem(finalI, finalI),
                 new CosmosItemRequestOptions()).block());
