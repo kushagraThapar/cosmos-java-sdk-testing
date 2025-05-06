@@ -132,90 +132,115 @@ public class CosmosDRDrillTesting {
             int randomOperation = ThreadLocalRandom.current().nextInt(4);
             switch (randomOperation) {
                 case 1:
-                    upsertItem(scheduledExecutor);
+                    scheduledExecutor.schedule(CosmosDRDrillTesting::upsertItem, 100, TimeUnit.MILLISECONDS);
                     break;
                 case 2:
-                    readItem(scheduledExecutor);
+                    scheduledExecutor.schedule(CosmosDRDrillTesting::readItem, 100, TimeUnit.MILLISECONDS);
                     break;
                 case 3:
-                    queryItem(scheduledExecutor);
+                    scheduledExecutor.schedule(CosmosDRDrillTesting::queryItem, 100, TimeUnit.MILLISECONDS);
                     break;
                 default:
             }
         }
     }
 
-    private static void upsertItem(ScheduledThreadPoolExecutor scheduledExecutor) {
+    private static void upsertItem() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+
+                Pojo item = getItem(finalI, finalI);
+
+                logger.info("upsert item: {}", finalI);
+                cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
+                        .onErrorResume(throwable -> {
+                            logger.error("Error occurred while upserting item", throwable);
+
+                            if (throwable instanceof CosmosException) {
+                                CosmosException cosmosException = (CosmosException) throwable;
+                                logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
+                            }
+
+                            return Mono.empty();
+                        })
+                        .block();
+            } catch (Exception e) {
+                logger.error("Error occurred while upserting item", e);
+            }
+        }
+
         try {
-            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-
-            Pojo item = getItem(finalI, finalI);
-
-            logger.info("upsert item: {}", finalI);
-            scheduledExecutor.schedule(() -> cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
-                    .onErrorResume(throwable -> {
-                        logger.error("Error occurred while upserting item", throwable);
-
-                        if (throwable instanceof CosmosException) {
-                            CosmosException cosmosException = (CosmosException) throwable;
-                            logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
-                        }
-
-                        return Mono.empty();
-                    })
-                    .block(), 10, TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-            logger.error("Error occurred while upserting item", e);
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    private static void readItem(ScheduledThreadPoolExecutor scheduledExecutor) {
+    private static void readItem() {
+
+        for (int i = 0; i < 10; i++) {
+            try {
+                int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+                logger.info("read item: {}", finalI);
+                Pojo item = getItem(finalI, finalI);
+                cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()), POINT_REQ_OPTS, Pojo.class)
+                        .onErrorResume(throwable -> {
+                            logger.error("Error occurred while reading item", throwable);
+
+                            if (throwable instanceof CosmosException) {
+                                CosmosException cosmosException = (CosmosException) throwable;
+                                logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
+                            }
+
+                            return Mono.empty();
+                        })
+                        .block();
+            } catch (Exception e) {
+                logger.error("Error occurred while reading item", e);
+            }
+        }
+
         try {
-            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-            logger.info("read item: {}", finalI);
-            Pojo item = getItem(finalI, finalI);
-            scheduledExecutor.schedule(() ->
-                    cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()), POINT_REQ_OPTS, Pojo.class)
-                            .onErrorResume(throwable -> {
-                                logger.error("Error occurred while reading item", throwable);
-
-                                if (throwable instanceof CosmosException) {
-                                    CosmosException cosmosException = (CosmosException) throwable;
-                                    logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
-                                }
-
-                                return Mono.empty();
-                            })
-                            .block(), 10, TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-            logger.error("Error occurred while reading item", e);
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    private static void queryItem(ScheduledThreadPoolExecutor scheduledExecutor) {
+    private static void queryItem() {
+
+        for (int i = 0; i < 10; i++) {
+            try {
+                int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+                logger.info("query item: {}", finalI);
+                Pojo item = getItem(finalI, finalI);
+
+                SqlQuerySpec querySpec = new SqlQuerySpec(query);
+                querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
+                        item.getPk())));
+                cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
+                        .collectList()
+                        .onErrorResume(throwable -> {
+                            logger.error("Error occurred while querying item", throwable);
+
+                            if (throwable instanceof CosmosException) {
+                                CosmosException cosmosException = (CosmosException) throwable;
+                                logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
+                            }
+
+                            return Mono.empty();
+                        })
+                        .block();
+            } catch (Exception e) {
+                logger.error("Error occurred while querying item", e);
+            }
+        }
+
         try {
-            int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-            logger.info("query item: {}", finalI);
-            Pojo item = getItem(finalI, finalI);
-
-            SqlQuerySpec querySpec = new SqlQuerySpec(query);
-            querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
-                item.getPk())));
-            scheduledExecutor.schedule(() -> cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
-                    .collectList()
-                    .onErrorResume(throwable -> {
-                        logger.error("Error occurred while querying item", throwable);
-
-                        if (throwable instanceof CosmosException) {
-                            CosmosException cosmosException = (CosmosException) throwable;
-                            logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
-                        }
-
-                        return Mono.empty();
-                    })
-                    .block(), 10, TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-            logger.error("Error occurred while querying item", e);
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
