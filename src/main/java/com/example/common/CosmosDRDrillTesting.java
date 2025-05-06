@@ -76,8 +76,10 @@ public class CosmosDRDrillTesting {
                 .endpoint(Configurations.endpoint);
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
+            logger.info("Creating client in direct mode");
             cosmosClientBuilder = cosmosClientBuilder.directMode();
         } else if (CONNECTION_MODE_AS_STRING.equals("GATEWAY")) {
+            logger.info("Creating client in gateway mode");
             cosmosClientBuilder = cosmosClientBuilder.gatewayMode();
         } else {
             logger.error("Invalid connection mode: {}", CONNECTION_MODE_AS_STRING);
