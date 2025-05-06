@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CosmosDRDrillTesting {
@@ -70,8 +71,7 @@ public class CosmosDRDrillTesting {
             .tenantId(AAD_TENANT_ID)
             .build();
 
-    private static final ScheduledThreadPoolExecutor scheduledExecutor =
-        new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
+    private static final String query = "select * from c where c.id=@id and c.pk=@pk";
 
     private static CosmosAsyncClient cosmosAsyncClient;
     private static CosmosAsyncDatabase cosmosAsyncDatabase;
@@ -90,6 +90,9 @@ public class CosmosDRDrillTesting {
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
                 .contentResponseOnWriteEnabled(true)
                 .endpoint(Configurations.endpoint);
+
+        ScheduledThreadPoolExecutor scheduledExecutor =
+                new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
             logger.info("Creating client in direct mode");
@@ -121,35 +124,35 @@ public class CosmosDRDrillTesting {
         insertData();
 
         //  Start the workload
-        startWorkload();
+        startWorkload(scheduledExecutor);
     }
 
-    private static void startWorkload() {
+    private static void startWorkload(ScheduledThreadPoolExecutor scheduledExecutor) {
         while (true) {
             int randomOperation = ThreadLocalRandom.current().nextInt(4);
             switch (randomOperation) {
                 case 1:
-                    upsertItem();
+                    upsertItem(scheduledExecutor);
                     break;
                 case 2:
-                    readItem();
+                    readItem(scheduledExecutor);
                     break;
                 case 3:
-                    queryItem();
+                    queryItem(scheduledExecutor);
                     break;
                 default:
             }
         }
     }
 
-    private static void upsertItem() {
+    private static void upsertItem(ScheduledThreadPoolExecutor scheduledExecutor) {
         try {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
 
             Pojo item = getItem(finalI, finalI);
 
             logger.info("upsert item: {}", finalI);
-            scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
+            scheduledExecutor.schedule(() -> cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
                     .onErrorResume(throwable -> {
                         logger.error("Error occurred while upserting item", throwable);
 
@@ -160,18 +163,18 @@ public class CosmosDRDrillTesting {
 
                         return Mono.empty();
                     })
-                    .block());
+                    .block(), 10, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             logger.error("Error occurred while upserting item", e);
         }
     }
 
-    private static void readItem() {
+    private static void readItem(ScheduledThreadPoolExecutor scheduledExecutor) {
         try {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("read item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
-            scheduledExecutor.execute(() ->
+            scheduledExecutor.schedule(() ->
                     cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()), POINT_REQ_OPTS, Pojo.class)
                             .onErrorResume(throwable -> {
                                 logger.error("Error occurred while reading item", throwable);
@@ -183,22 +186,22 @@ public class CosmosDRDrillTesting {
 
                                 return Mono.empty();
                             })
-                            .block());
+                            .block(), 10, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             logger.error("Error occurred while reading item", e);
         }
     }
 
-    private static void queryItem() {
+    private static void queryItem(ScheduledThreadPoolExecutor scheduledExecutor) {
         try {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("query item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
-            String query = "select * from c where c.id=@id and c.pk=@pk";
+
             SqlQuerySpec querySpec = new SqlQuerySpec(query);
             querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
                 item.getPk())));
-            scheduledExecutor.execute(() -> cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
+            scheduledExecutor.schedule(() -> cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
                     .collectList()
                     .onErrorResume(throwable -> {
                         logger.error("Error occurred while querying item", throwable);
@@ -210,7 +213,7 @@ public class CosmosDRDrillTesting {
 
                         return Mono.empty();
                     })
-                    .block());
+                    .block(), 10, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             logger.error("Error occurred while querying item", e);
         }
