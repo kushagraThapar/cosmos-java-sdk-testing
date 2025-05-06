@@ -71,6 +71,8 @@ public class CosmosDRDrillTesting {
             .tenantId(AAD_TENANT_ID)
             .build();
 
+    private static final String query = "select * from c where c.id=@id and c.pk=@pk";
+
     private static CosmosAsyncClient cosmosAsyncClient;
     private static CosmosAsyncDatabase cosmosAsyncDatabase;
     private static CosmosAsyncContainer cosmosAsyncContainer;
@@ -195,7 +197,7 @@ public class CosmosDRDrillTesting {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("query item: {}", finalI);
             Pojo item = getItem(finalI, finalI);
-            String query = "select * from c where c.id=@id and c.pk=@pk";
+
             SqlQuerySpec querySpec = new SqlQuerySpec(query);
             querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
                 item.getPk())));
