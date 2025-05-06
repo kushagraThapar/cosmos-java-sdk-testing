@@ -145,8 +145,11 @@ public class CosmosDRDrillTesting {
     private static void upsertItem() {
         try {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+
+            Pojo item = getItem(finalI, finalI);
+
             logger.info("upsert item: {}", finalI);
-            scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(getItem(finalI, finalI), POINT_REQ_OPTS)
+            scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
                     .onErrorResume(throwable -> {
                         logger.error("Error occurred while upserting item", throwable);
 
@@ -220,8 +223,10 @@ public class CosmosDRDrillTesting {
 
         while (successfulInserts.get() < TOTAL_NUMBER_OF_DOCUMENTS) {
             int finalI = successfulInserts.get();
+
+            Pojo item = getItem(finalI, finalI);
             cosmosAsyncContainer
-                    .upsertItem(getItem(finalI, finalI))
+                    .upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
                     .doOnSuccess(ignore -> successfulInserts.incrementAndGet())
                     .onErrorResume(throwable -> {
                         logger.error("Error occurred while upserting item", throwable);
