@@ -50,11 +50,11 @@ public class CosmosDRDrillTesting {
 
     private static final String AAD_MANAGED_IDENTITY_ID = System.getProperty("AAD_MANAGED_IDENTITY_ID",
         StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("AAD_MANAGED_IDENTITY_ID")), null));
+            System.getenv().get("AAD_MANAGED_IDENTITY_ID")), ""));
 
     private static final String AAD_TENANT_ID = System.getProperty("AAD_TENANT_ID",
         StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("AAD_TENANT_ID")), null));
+            System.getenv().get("AAD_TENANT_ID")), ""));
 
     private static final TokenCredential CREDENTIAL = new DefaultAzureCredentialBuilder()
             .managedIdentityClientId(AAD_MANAGED_IDENTITY_ID)
@@ -72,8 +72,8 @@ public class CosmosDRDrillTesting {
     public static void main(String[] args) {
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
-
-                .contentResponseOnWriteEnabled(true);
+                .contentResponseOnWriteEnabled(true)
+                .endpoint(Configurations.endpoint);
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
             cosmosClientBuilder = cosmosClientBuilder.directMode();
@@ -89,9 +89,7 @@ public class CosmosDRDrillTesting {
             cosmosClientBuilder = cosmosClientBuilder.credential(CREDENTIAL);
         } else {
             logger.info("Using key-based authentication");
-            cosmosClientBuilder = cosmosClientBuilder
-                    .endpoint(Configurations.endpoint)
-                    .key(Configurations.key);
+            cosmosClientBuilder = cosmosClientBuilder.key(Configurations.key);
         }
 
         cosmosAsyncClient = cosmosClientBuilder
