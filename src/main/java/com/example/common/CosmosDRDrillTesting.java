@@ -220,9 +220,6 @@ public class CosmosDRDrillTesting {
 
         while (successfulInserts.get() < TOTAL_NUMBER_OF_DOCUMENTS) {
             int finalI = successfulInserts.get();
-
-            scheduledExecutor.execute(() -> cosmosAsyncContainer.upsertItem(getItem(finalI, finalI)).block());
-
             cosmosAsyncContainer
                     .upsertItem(getItem(finalI, finalI))
                     .doOnSuccess(ignore -> successfulInserts.incrementAndGet())
