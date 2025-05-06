@@ -71,9 +71,6 @@ public class CosmosDRDrillTesting {
             .tenantId(AAD_TENANT_ID)
             .build();
 
-    private static final ScheduledThreadPoolExecutor scheduledExecutor =
-        new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
-
     private static CosmosAsyncClient cosmosAsyncClient;
     private static CosmosAsyncDatabase cosmosAsyncDatabase;
     private static CosmosAsyncContainer cosmosAsyncContainer;
@@ -91,6 +88,9 @@ public class CosmosDRDrillTesting {
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
                 .contentResponseOnWriteEnabled(true)
                 .endpoint(Configurations.endpoint);
+
+        ScheduledThreadPoolExecutor scheduledExecutor =
+                new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
             logger.info("Creating client in direct mode");
@@ -122,28 +122,28 @@ public class CosmosDRDrillTesting {
         insertData();
 
         //  Start the workload
-        startWorkload();
+        startWorkload(scheduledExecutor);
     }
 
-    private static void startWorkload() {
+    private static void startWorkload(ScheduledThreadPoolExecutor scheduledExecutor) {
         while (true) {
             int randomOperation = ThreadLocalRandom.current().nextInt(4);
             switch (randomOperation) {
                 case 1:
-                    upsertItem();
+                    upsertItem(scheduledExecutor);
                     break;
                 case 2:
-                    readItem();
+                    readItem(scheduledExecutor);
                     break;
                 case 3:
-                    queryItem();
+                    queryItem(scheduledExecutor);
                     break;
                 default:
             }
         }
     }
 
-    private static void upsertItem() {
+    private static void upsertItem(ScheduledThreadPoolExecutor scheduledExecutor) {
         try {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
 
@@ -167,7 +167,7 @@ public class CosmosDRDrillTesting {
         }
     }
 
-    private static void readItem() {
+    private static void readItem(ScheduledThreadPoolExecutor scheduledExecutor) {
         try {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("read item: {}", finalI);
@@ -190,7 +190,7 @@ public class CosmosDRDrillTesting {
         }
     }
 
-    private static void queryItem() {
+    private static void queryItem(ScheduledThreadPoolExecutor scheduledExecutor) {
         try {
             int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
             logger.info("query item: {}", finalI);
