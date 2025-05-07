@@ -11,6 +11,7 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.guava25.base.Strings;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
+import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.SqlParameter;
@@ -18,10 +19,13 @@ import com.azure.cosmos.models.SqlQuerySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.azure.identity.DefaultAzureCredentialBuilder;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -85,14 +89,13 @@ public class CosmosDRDrillTesting {
     private static final CosmosQueryRequestOptions QUERY_REQ_OPTS = new CosmosQueryRequestOptions()
             .setCosmosEndToEndOperationLatencyPolicyConfig(SIX_SECOND_E2E_TIMEOUT);
 
+    private static final int PROCESSOR_COUNT = Runtime.getRuntime().availableProcessors();
+
     public static void main(String[] args) {
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
                 .contentResponseOnWriteEnabled(true)
                 .endpoint(Configurations.endpoint);
-
-        ScheduledThreadPoolExecutor scheduledExecutor =
-                new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
             logger.info("Creating client in direct mode");
@@ -124,124 +127,96 @@ public class CosmosDRDrillTesting {
         insertData();
 
         //  Start the workload
-        startWorkload(scheduledExecutor);
+        startWorkload();
+
+        while (true) {}
     }
 
-    private static void startWorkload(ScheduledThreadPoolExecutor scheduledExecutor) {
-        while (true) {
-            int randomOperation = ThreadLocalRandom.current().nextInt(4);
-            switch (randomOperation) {
-                case 1:
-                    scheduledExecutor.schedule(CosmosDRDrillTesting::upsertItem, 100, TimeUnit.MILLISECONDS);
-                    break;
-                case 2:
-                    scheduledExecutor.schedule(CosmosDRDrillTesting::readItem, 100, TimeUnit.MILLISECONDS);
-                    break;
-                case 3:
-                    scheduledExecutor.schedule(CosmosDRDrillTesting::queryItem, 100, TimeUnit.MILLISECONDS);
-                    break;
-                default:
-            }
-        }
-    }
-
-    private static void upsertItem() {
-        for (int i = 0; i < 10; i++) {
-            try {
-                int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-
-                Pojo item = getItem(finalI, finalI);
-
-                logger.info("upsert item: {}", finalI);
-                cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
-                        .onErrorResume(throwable -> {
-                            logger.error("Error occurred while upserting item", throwable);
-
-                            if (throwable instanceof CosmosException) {
-                                CosmosException cosmosException = (CosmosException) throwable;
-                                logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
-                            }
-
+    private static void startWorkload() {
+        Mono.just(1)
+                .repeat()
+                .flatMap(integer -> {
+                    int random = ThreadLocalRandom.current().nextInt(3);
+                    switch (random) {
+                        case 0:
+                            return upsertItem();
+                        case 1:
+                            return readItem();
+                        case 2:
+                            return queryItem();
+                        default:
                             return Mono.empty();
-                        })
-                        .block();
-            } catch (Exception e) {
-                logger.error("Error occurred while upserting item", e);
-            }
-        }
-
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+                    }
+                }, PROCESSOR_COUNT, PROCESSOR_COUNT)
+                .onErrorResume(throwable -> {
+                    logger.error("Error occurred in workload", throwable);
+                    return Mono.empty();
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
     }
 
-    private static void readItem() {
+    private static Mono<CosmosItemResponse<Pojo>> upsertItem() {
+        int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
 
-        for (int i = 0; i < 10; i++) {
-            try {
-                int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-                logger.info("read item: {}", finalI);
-                Pojo item = getItem(finalI, finalI);
-                cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()), POINT_REQ_OPTS, Pojo.class)
-                        .onErrorResume(throwable -> {
-                            logger.error("Error occurred while reading item", throwable);
+        Pojo item = getItem(finalI, finalI);
 
-                            if (throwable instanceof CosmosException) {
-                                CosmosException cosmosException = (CosmosException) throwable;
-                                logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
-                            }
+        logger.info("upsert item: {}", finalI);
+        return cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
+                .onErrorResume(throwable -> {
+                    logger.error("Error occurred while upserting item", throwable);
 
-                            return Mono.empty();
-                        })
-                        .block();
-            } catch (Exception e) {
-                logger.error("Error occurred while reading item", e);
-            }
-        }
+                    if (throwable instanceof CosmosException) {
+                        CosmosException cosmosException = (CosmosException) throwable;
+                        logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
+                    }
 
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+                    return Mono.empty();
+                });
+
     }
 
-    private static void queryItem() {
+    private static Mono<CosmosItemResponse<Pojo>> readItem() {
 
-        for (int i = 0; i < 10; i++) {
-            try {
-                int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-                logger.info("query item: {}", finalI);
-                Pojo item = getItem(finalI, finalI);
+        int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+        logger.info("read item: {}", finalI);
+        Pojo item = getItem(finalI, finalI);
+        return cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()), POINT_REQ_OPTS, Pojo.class)
+                .onErrorResume(throwable -> {
+                    logger.error("Error occurred while reading item", throwable);
 
-                SqlQuerySpec querySpec = new SqlQuerySpec(query);
-                querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
-                        item.getPk())));
-                cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
-                        .collectList()
-                        .onErrorResume(throwable -> {
-                            logger.error("Error occurred while querying item", throwable);
+                    if (throwable instanceof CosmosException) {
+                        CosmosException cosmosException = (CosmosException) throwable;
+                        logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
+                    }
 
-                            if (throwable instanceof CosmosException) {
-                                CosmosException cosmosException = (CosmosException) throwable;
-                                logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
-                            }
+                    return Mono.empty();
+                });
 
-                            return Mono.empty();
-                        })
-                        .block();
-            } catch (Exception e) {
-                logger.error("Error occurred while querying item", e);
-            }
-        }
+    }
 
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+    private static Mono<List<Pojo>> queryItem() {
+
+        int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+        logger.info("query item: {}", finalI);
+        Pojo item = getItem(finalI, finalI);
+
+        SqlQuerySpec querySpec = new SqlQuerySpec(query);
+        querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
+                item.getPk())));
+        return cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
+                .collectList()
+                .onErrorResume(throwable -> {
+                    logger.error("Error occurred while querying item", throwable);
+
+                    if (throwable instanceof CosmosException) {
+                        CosmosException cosmosException = (CosmosException) throwable;
+                        logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
+                    }
+
+                    return Mono.empty();
+                });
+
     }
 
     private static void insertData() {
