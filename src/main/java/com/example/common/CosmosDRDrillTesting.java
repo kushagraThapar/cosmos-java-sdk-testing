@@ -43,7 +43,7 @@ public class CosmosDRDrillTesting {
     private static final String CONTAINER_ID = System.getProperty("CONTAINER_ID",
         StringUtils.defaultString(Strings.emptyToNull(
             System.getenv().get("CONTAINER_ID")), "MigrationContainer"));
-    private static final String PARTITION_KEY_PATH = "/pk";
+    private static final String PARTITION_KEY_PATH = "/id";
     private static final String TOTAL_DOCUMENTS = System.getProperty("TOTAL_DOCUMENTS",
         StringUtils.defaultString(Strings.emptyToNull(
             System.getenv().get("TOTAL_DOCUMENTS")), "100000"));
@@ -162,7 +162,7 @@ public class CosmosDRDrillTesting {
         Pojo item = getItem(finalI, finalI);
 
         logger.info("upsert item: {}", finalI);
-        return cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
+        return cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getId()), POINT_REQ_OPTS)
                 .onErrorResume(throwable -> {
                     logger.error("Error occurred while upserting item", throwable);
 
@@ -181,7 +181,7 @@ public class CosmosDRDrillTesting {
         int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
         logger.info("read item: {}", finalI);
         Pojo item = getItem(finalI, finalI);
-        return cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()), POINT_REQ_OPTS, Pojo.class)
+        return cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getId()), POINT_REQ_OPTS, Pojo.class)
                 .onErrorResume(throwable -> {
                     logger.error("Error occurred while reading item", throwable);
 
@@ -203,7 +203,7 @@ public class CosmosDRDrillTesting {
 
         SqlQuerySpec querySpec = new SqlQuerySpec(query);
         querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
-                item.getPk())));
+                item.getId())));
         return cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
                 .collectList()
                 .onErrorResume(throwable -> {
@@ -229,7 +229,7 @@ public class CosmosDRDrillTesting {
 
             Pojo item = getItem(finalI, finalI);
             cosmosAsyncContainer
-                    .upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
+                    .upsertItem(item, new PartitionKey(item.getId()), POINT_REQ_OPTS)
                     .doOnSuccess(ignore -> successfulInserts.incrementAndGet())
                     .onErrorResume(throwable -> {
                         logger.error("Error occurred while upserting item", throwable);
