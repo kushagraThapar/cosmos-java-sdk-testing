@@ -1,6 +1,7 @@
 package com.example.common;
 
 import com.azure.core.credential.TokenCredential;
+import com.azure.core.http.ProxyOptions;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosAsyncDatabase;
@@ -8,6 +9,7 @@ import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosEndToEndOperationLatencyPolicyConfig;
 import com.azure.cosmos.CosmosEndToEndOperationLatencyPolicyConfigBuilder;
 import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.GatewayConnectionConfig;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.guava25.base.Strings;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
@@ -19,18 +21,16 @@ import com.azure.cosmos.models.SqlQuerySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.azure.identity.DefaultAzureCredentialBuilder;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CosmosDRDrillTesting {
@@ -69,6 +69,23 @@ public class CosmosDRDrillTesting {
         StringUtils.defaultString(Strings.emptyToNull(
             System.getenv().get("AAD_TENANT_ID")), ""));
 
+    private static final boolean IS_PROXY_ENABLED = Boolean.parseBoolean(
+        System.getProperty("IS_PROXY_ENABLED",
+            StringUtils.defaultString(Strings.emptyToNull(
+                System.getenv().get("IS_PROXY_ENABLED")), "false")));
+
+    private static final String PROXY_HOST = System.getProperty("PROXY_HOST",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("PROXY_HOST")), "0.0.0.0"));
+
+    private static final int PROXY_PORT = Integer.parseInt(System.getProperty("PROXY_PORT",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("PROXY_PORT")), "5100")));
+
+    private static final String USER_AGENT_SUFFIX = System.getProperty("USER_AGENT_SUFFIX",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("USER_AGENT_SUFFIX")), ""));
+
     private static final TokenCredential CREDENTIAL = new DefaultAzureCredentialBuilder()
             .managedIdentityClientId(AAD_MANAGED_IDENTITY_ID)
             .authorityHost(AAD_LOGIN_ENDPOINT)
@@ -95,14 +112,16 @@ public class CosmosDRDrillTesting {
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
                 .contentResponseOnWriteEnabled(true)
-                .endpoint(Configurations.endpoint);
+                .endpoint(Configurations.endpoint)
+                .userAgentSuffix(USER_AGENT_SUFFIX);
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
             logger.info("Creating client in direct mode");
             cosmosClientBuilder = cosmosClientBuilder.directMode();
         } else if (CONNECTION_MODE_AS_STRING.equals("GATEWAY")) {
             logger.info("Creating client in gateway mode");
-            cosmosClientBuilder = cosmosClientBuilder.gatewayMode();
+            GatewayConnectionConfig gatewayConnectionConfig = getGatewayConnectionConfig();
+            cosmosClientBuilder = cosmosClientBuilder.gatewayMode(gatewayConnectionConfig);
         } else {
             logger.error("Invalid connection mode: {}", CONNECTION_MODE_AS_STRING);
             return;
@@ -265,5 +284,15 @@ public class CosmosDRDrillTesting {
             logger.error("Error occurred while creating database and container", e);
         }
         logger.info("Setup complete.");
+    }
+
+    private static GatewayConnectionConfig getGatewayConnectionConfig() {
+        GatewayConnectionConfig gatewayConnectionConfig = GatewayConnectionConfig.getDefaultConfig();
+
+        if (IS_PROXY_ENABLED) {
+            gatewayConnectionConfig.setProxy(new ProxyOptions(ProxyOptions.Type.HTTP, new InetSocketAddress(PROXY_HOST, PROXY_PORT)));
+        }
+
+        return gatewayConnectionConfig;
     }
 }
