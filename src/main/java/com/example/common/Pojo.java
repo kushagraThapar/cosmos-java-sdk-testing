@@ -26,4 +26,13 @@ public class Pojo {
     public String getField() {
         return field;
     }
+
+    @Override
+    public String toString() {
+        return "Pojo{" +
+                "id='" + id + '\'' +
+                ", pk='" + pk + '\'' +
+                ", field='" + field + '\'' +
+                '}';
+    }
 }
