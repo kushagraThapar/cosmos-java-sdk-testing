@@ -24,6 +24,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -75,11 +76,20 @@ public class CosmosDRDrillTesting {
             .tenantId(AAD_TENANT_ID)
             .build();
 
+    private static final int COSMOS_CLIENT_COUNT = Integer.parseInt(System.getProperty("COSMOS_CLIENT_COUNT",
+        StringUtils.defaultString(Strings.emptyToNull(
+            System.getenv().get("COSMOS_CLIENT_COUNT")), "1")));
+
+    private static final List<String> PREFERRED_REGIONS = Arrays.asList(
+            System.getProperty("PREFERRED_REGIONS",
+                StringUtils.defaultString(Strings.emptyToNull(
+                    System.getenv().get("PREFERRED_REGIONS")), "East US 2 EUAP,Central US EUAP")).split(","));
+
     private static final String query = "select * from c where c.id=@id and c.pk=@pk";
 
-    private static CosmosAsyncClient cosmosAsyncClient;
-    private static CosmosAsyncDatabase cosmosAsyncDatabase;
-    private static CosmosAsyncContainer cosmosAsyncContainer;
+    private static List<CosmosAsyncClient> cosmosAsyncClients = new ArrayList<>();
+    private static List<CosmosAsyncDatabase> cosmosAsyncDatabases = new ArrayList<>();
+    private static List<CosmosAsyncContainer> cosmosAsyncContainers = new ArrayList<>();
 
     private static final CosmosEndToEndOperationLatencyPolicyConfig SIX_SECOND_E2E_TIMEOUT = new CosmosEndToEndOperationLatencyPolicyConfigBuilder(Duration.ofSeconds(6)).build();
 
@@ -116,15 +126,26 @@ public class CosmosDRDrillTesting {
             cosmosClientBuilder = cosmosClientBuilder.key(Configurations.key);
         }
 
-        cosmosAsyncClient = cosmosClientBuilder
-            .contentResponseOnWriteEnabled(true)
-            .buildAsyncClient();
+        for (int i = 0; i < COSMOS_CLIENT_COUNT; i++) {
+            CosmosAsyncClient cosmosAsyncClient = cosmosClientBuilder
+                    .contentResponseOnWriteEnabled(true)
+                    .userAgentSuffix("client-" + i)
+                    .buildAsyncClient();
+
+            cosmosAsyncClients.add(cosmosAsyncClient);
+
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
 
         //  Create initial database and container if they don't exist
         setupDBAndContainer();
 
         //  Insert initial data for the workload
-        insertData();
+        insertData(cosmosAsyncContainers.get(0));
 
         //  Start the workload
         startWorkload();
@@ -137,13 +158,14 @@ public class CosmosDRDrillTesting {
                 .repeat()
                 .flatMap(integer -> {
                     int random = ThreadLocalRandom.current().nextInt(3);
+                    int containerId = ThreadLocalRandom.current().nextInt(COSMOS_CLIENT_COUNT);
                     switch (random) {
                         case 0:
-                            return upsertItem();
+                            return upsertItem(cosmosAsyncContainers.get(containerId));
                         case 1:
-                            return readItem();
+                            return readItem(cosmosAsyncContainers.get(containerId));
                         case 2:
-                            return queryItem();
+                            return queryItem(cosmosAsyncContainers.get(containerId));
                         default:
                             return Mono.empty();
                     }
@@ -156,7 +178,7 @@ public class CosmosDRDrillTesting {
                 .subscribe();
     }
 
-    private static Mono<CosmosItemResponse<Pojo>> upsertItem() {
+    private static Mono<CosmosItemResponse<Pojo>> upsertItem(CosmosAsyncContainer cosmosAsyncContainer) {
         int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
 
         Pojo item = getItem(finalI, finalI);
@@ -176,7 +198,7 @@ public class CosmosDRDrillTesting {
 
     }
 
-    private static Mono<CosmosItemResponse<Pojo>> readItem() {
+    private static Mono<CosmosItemResponse<Pojo>> readItem(CosmosAsyncContainer cosmosAsyncContainer) {
 
         int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
         logger.info("read item: {}", finalI);
@@ -195,7 +217,7 @@ public class CosmosDRDrillTesting {
 
     }
 
-    private static Mono<List<Pojo>> queryItem() {
+    private static Mono<List<Pojo>> queryItem(CosmosAsyncContainer cosmosAsyncContainer) {
 
         int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
         logger.info("query item: {}", finalI);
@@ -219,7 +241,7 @@ public class CosmosDRDrillTesting {
 
     }
 
-    private static void insertData() {
+    private static void insertData(CosmosAsyncContainer cosmosAsyncContainer) {
         logger.info("Inserting initial data...");
 
         AtomicInteger successfulInserts = new AtomicInteger(0);
@@ -254,16 +276,23 @@ public class CosmosDRDrillTesting {
     }
 
     private static void setupDBAndContainer() {
-        try {
-            logger.info("Setting up database...");
-            cosmosAsyncClient.createDatabaseIfNotExists(DATABASE_ID).block();
-            cosmosAsyncDatabase = cosmosAsyncClient.getDatabase(DATABASE_ID);
-            logger.info("Setting up container...");
-            cosmosAsyncDatabase.createContainerIfNotExists(CONTAINER_ID, PARTITION_KEY_PATH).block();
-            cosmosAsyncContainer = cosmosAsyncDatabase.getContainer(CONTAINER_ID);
-        } catch (Exception e) {
-            logger.error("Error occurred while creating database and container", e);
+
+        for (CosmosAsyncClient cosmosAsyncClient : cosmosAsyncClients) {
+            try {
+                logger.info("Setting up database...");
+                cosmosAsyncClient.createDatabaseIfNotExists(DATABASE_ID).block();
+                CosmosAsyncDatabase cosmosAsyncDatabase = cosmosAsyncClient.getDatabase(DATABASE_ID);
+                logger.info("Setting up container...");
+                cosmosAsyncDatabase.createContainerIfNotExists(CONTAINER_ID, PARTITION_KEY_PATH).block();
+                CosmosAsyncContainer cosmosAsyncContainer = cosmosAsyncDatabase.getContainer(CONTAINER_ID);
+
+                cosmosAsyncDatabases.add(cosmosAsyncDatabase);
+                cosmosAsyncContainers.add(cosmosAsyncContainer);
+
+            } catch (Exception e) {
+                logger.error("Error occurred while creating database and container", e);
+            }
+            logger.info("Setup complete.");
         }
-        logger.info("Setup complete.");
     }
 }
