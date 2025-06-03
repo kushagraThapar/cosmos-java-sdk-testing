@@ -145,6 +145,9 @@ public class CosmosDRDrillTesting {
         }
 
         for (int i = 0; i < COSMOS_CLIENT_COUNT; i++) {
+
+            logger.info("Creating client {}", i);
+
             CosmosAsyncClient cosmosAsyncClient = cosmosClientBuilder
                     .userAgentSuffix("client-" + i)
                     .buildAsyncClient();
