@@ -147,7 +147,6 @@ public class CosmosDRDrillTesting {
 
         for (int i = 0; i < COSMOS_CLIENT_COUNT; i++) {
             CosmosAsyncClient cosmosAsyncClient = cosmosClientBuilder
-                    .contentResponseOnWriteEnabled(true)
                     .userAgentSuffix("client-" + i)
                     .buildAsyncClient();
 
