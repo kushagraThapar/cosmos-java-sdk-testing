@@ -290,6 +290,7 @@ public class CosmosDRDrillTesting {
         GatewayConnectionConfig gatewayConnectionConfig = GatewayConnectionConfig.getDefaultConfig();
 
         if (IS_PROXY_ENABLED) {
+            System.setProperty("COSMOS.EMULATOR_SERVER_CERTIFICATE_VALIDATION_DISABLED", "true");
             gatewayConnectionConfig.setProxy(new ProxyOptions(ProxyOptions.Type.HTTP, InetSocketAddress.createUnresolved(PROXY_HOST, PROXY_PORT)));
         }
 
