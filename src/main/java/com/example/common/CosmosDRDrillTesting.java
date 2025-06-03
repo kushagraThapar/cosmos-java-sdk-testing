@@ -121,9 +121,8 @@ public class CosmosDRDrillTesting {
     public static void main(String[] args) {
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
-                .contentResponseOnWriteEnabled(true)
                 .endpoint(Configurations.endpoint)
-                .userAgentSuffix(USER_AGENT_SUFFIX);
+                .preferredRegions(PREFERRED_REGIONS);
 
         if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
             logger.info("Creating client in direct mode");
