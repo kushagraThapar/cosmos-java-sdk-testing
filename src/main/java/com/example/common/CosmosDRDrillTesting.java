@@ -290,7 +290,7 @@ public class CosmosDRDrillTesting {
         GatewayConnectionConfig gatewayConnectionConfig = GatewayConnectionConfig.getDefaultConfig();
 
         if (IS_PROXY_ENABLED) {
-            gatewayConnectionConfig.setProxy(new ProxyOptions(ProxyOptions.Type.HTTP, new InetSocketAddress(PROXY_HOST, PROXY_PORT)));
+            gatewayConnectionConfig.setProxy(new ProxyOptions(ProxyOptions.Type.HTTP, InetSocketAddress.createUnresolved(PROXY_HOST, PROXY_PORT)));
         }
 
         return gatewayConnectionConfig;
