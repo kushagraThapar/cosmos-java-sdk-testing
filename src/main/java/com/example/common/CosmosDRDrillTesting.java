@@ -66,6 +66,8 @@ public class CosmosDRDrillTesting {
 
     public static void main(String[] args) {
 
+        Object waitObject = new Object();
+
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
                 .endpoint(Configurations.endpoint)
                 .preferredRegions(Configurations.PREFERRED_REGIONS);
@@ -117,7 +119,21 @@ public class CosmosDRDrillTesting {
         //  Start the workload
         startWorkload();
 
-        while (true) {}
+        synchronized (waitObject) {
+            try {
+                waitObject.wait();
+            } catch (InterruptedException e) {
+                logger.warn("Main thread interrupted: {}", e.getMessage(), e);
+                try {
+                    throw e;
+                } catch (InterruptedException ex) {
+                    throw new RuntimeException(ex);
+                }
+            } catch (IllegalMonitorStateException e) {
+                logger.error("Illegal monitor state: {}", e.getMessage(), e);
+                throw e;
+            }
+        }
     }
 
     private static void startWorkload() {
@@ -128,15 +144,24 @@ public class CosmosDRDrillTesting {
                     int containerId = ThreadLocalRandom.current().nextInt(Configurations.COSMOS_CLIENT_COUNT);
                     switch (random) {
                         case 0:
-                            return upsertItem(cosmosAsyncContainers.get(containerId));
+                            return Configurations.QPS > 0
+                                    ? Mono.delay(Duration.ofMillis(1000 / Configurations.QPS))
+                                    .then(upsertItem(cosmosAsyncContainers.get(containerId)))
+                                    : upsertItem(cosmosAsyncContainers.get(containerId));
                         case 1:
-                            return readItem(cosmosAsyncContainers.get(containerId));
+                            return Configurations.QPS > 0
+                                    ? Mono.delay(Duration.ofMillis(1000 / Configurations.QPS))
+                                    .then(readItem(cosmosAsyncContainers.get(containerId)))
+                                    : readItem(cosmosAsyncContainers.get(containerId));
                         case 2:
-                            return queryItem(cosmosAsyncContainers.get(containerId));
+                            return Configurations.QPS > 0
+                                    ? Mono.delay(Duration.ofMillis(1000 / Configurations.QPS))
+                                    .then(queryItem(cosmosAsyncContainers.get(containerId)))
+                                    : queryItem(cosmosAsyncContainers.get(containerId));
                         default:
                             return Mono.empty();
                     }
-                }, PROCESSOR_COUNT, PROCESSOR_COUNT)
+                }, Configurations.QPS > 0 ? 1 : PROCESSOR_COUNT, Configurations.QPS > 0 ? 1 : PROCESSOR_COUNT)
                 .onErrorResume(throwable -> {
                     logger.error("Error occurred in workload", throwable);
                     return Mono.empty();

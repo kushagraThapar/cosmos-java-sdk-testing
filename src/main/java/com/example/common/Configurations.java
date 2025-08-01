@@ -37,4 +37,6 @@ public class Configurations {
             System.getProperty("PREFERRED_REGIONS",
                             StringUtils.defaultString(Strings.emptyToNull(System.getenv().get("PREFERRED_REGIONS")), "East US 2 EUAP,Central US EUAP"))
                     .split(","));
+    public static final int QPS = Integer.parseInt(System.getProperty("QPS",
+            StringUtils.defaultString(Strings.emptyToNull(System.getenv().get("QPS")), "-1")));
 }
