@@ -39,70 +39,6 @@ public class CosmosDRDrillTesting {
 
     private static final Logger logger = LoggerFactory.getLogger(CosmosDRDrillTesting.class.getName());
 
-    private static final String DATABASE_ID = System.getProperty("DATABASE_ID",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("DATABASE_ID")), "MigrationDB"));
-    private static final String CONTAINER_ID = System.getProperty("CONTAINER_ID",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("CONTAINER_ID")), "MigrationContainer"));
-    private static final String PARTITION_KEY_PATH = "/id";
-    private static final String TOTAL_DOCUMENTS = System.getProperty("TOTAL_DOCUMENTS",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("TOTAL_DOCUMENTS")), "100000"));
-    private static final String CONNECTION_MODE_AS_STRING = System.getProperty("CONNECTION_MODE",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("CONNECTION_MODE")), "DIRECT")).toUpperCase(Locale.ROOT);
-    private static final int TOTAL_NUMBER_OF_DOCUMENTS = Integer.parseInt(TOTAL_DOCUMENTS);
-
-    private static final boolean IS_MANAGED_IDENTITY_ENABLED = Boolean.parseBoolean(
-        System.getProperty("IS_MANAGED_IDENTITY_ENABLED",
-            StringUtils.defaultString(Strings.emptyToNull(
-                System.getenv().get("IS_MANAGED_IDENTITY_ENABLED")), "false")));
-
-    private static final String AAD_LOGIN_ENDPOINT = System.getProperty("AAD_LOGIN_ENDPOINT",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("AAD_LOGIN_ENDPOINT")), "https://login.microsoftonline.com/"));
-
-    private static final String AAD_MANAGED_IDENTITY_ID = System.getProperty("AAD_MANAGED_IDENTITY_ID",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("AAD_MANAGED_IDENTITY_ID")), ""));
-
-    private static final String AAD_TENANT_ID = System.getProperty("AAD_TENANT_ID",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("AAD_TENANT_ID")), ""));
-
-    private static final boolean IS_PROXY_ENABLED = Boolean.parseBoolean(
-        System.getProperty("IS_PROXY_ENABLED",
-            StringUtils.defaultString(Strings.emptyToNull(
-                System.getenv().get("IS_PROXY_ENABLED")), "false")));
-
-    private static final String PROXY_HOST = System.getProperty("PROXY_HOST",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("PROXY_HOST")), "0.0.0.0"));
-
-    private static final int PROXY_PORT = Integer.parseInt(System.getProperty("PROXY_PORT",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("PROXY_PORT")), "5100")));
-
-    private static final String USER_AGENT_SUFFIX = System.getProperty("USER_AGENT_SUFFIX",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("USER_AGENT_SUFFIX")), ""));
-
-    private static final TokenCredential CREDENTIAL = new DefaultAzureCredentialBuilder()
-            .managedIdentityClientId(AAD_MANAGED_IDENTITY_ID)
-            .authorityHost(AAD_LOGIN_ENDPOINT)
-            .tenantId(AAD_TENANT_ID)
-            .build();
-
-    private static final int COSMOS_CLIENT_COUNT = Integer.parseInt(System.getProperty("COSMOS_CLIENT_COUNT",
-        StringUtils.defaultString(Strings.emptyToNull(
-            System.getenv().get("COSMOS_CLIENT_COUNT")), "1")));
-
-    private static final List<String> PREFERRED_REGIONS = Arrays.asList(
-            System.getProperty("PREFERRED_REGIONS",
-                StringUtils.defaultString(Strings.emptyToNull(
-                    System.getenv().get("PREFERRED_REGIONS")), "East US 2 EUAP,Central US EUAP")).split(","));
-
     private static final String query = "select * from c where c.id=@id and c.pk=@pk";
 
     private static List<CosmosAsyncClient> cosmosAsyncClients = new ArrayList<>();
@@ -122,25 +58,31 @@ public class CosmosDRDrillTesting {
     private static final CosmosClientTelemetryConfig TELEMETRY_CONFIG = new CosmosClientTelemetryConfig()
             .diagnosticsHandler(new SamplingCosmosDiagnosticsLogger(10, 60_000));
 
+    private static final TokenCredential CREDENTIAL = new DefaultAzureCredentialBuilder()
+            .managedIdentityClientId(Configurations.AAD_MANAGED_IDENTITY_ID)
+            .authorityHost(Configurations.AAD_LOGIN_ENDPOINT)
+            .tenantId(Configurations.AAD_TENANT_ID)
+            .build();
+
     public static void main(String[] args) {
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
                 .endpoint(Configurations.endpoint)
-                .preferredRegions(PREFERRED_REGIONS);
+                .preferredRegions(Configurations.PREFERRED_REGIONS);
 
-        if (CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
+        if (Configurations.CONNECTION_MODE_AS_STRING.equals("DIRECT")) {
             logger.info("Creating client in direct mode");
             cosmosClientBuilder = cosmosClientBuilder.directMode();
-        } else if (CONNECTION_MODE_AS_STRING.equals("GATEWAY")) {
+        } else if (Configurations.CONNECTION_MODE_AS_STRING.equals("GATEWAY")) {
             logger.info("Creating client in gateway mode");
-            GatewayConnectionConfig gatewayConnectionConfig = getGatewayConnectionConfig();
+            GatewayConnectionConfig gatewayConnectionConfig = GatewayConnectionConfig.getDefaultConfig();
             cosmosClientBuilder = cosmosClientBuilder.gatewayMode(gatewayConnectionConfig);
         } else {
-            logger.error("Invalid connection mode: {}", CONNECTION_MODE_AS_STRING);
+            logger.error("Invalid connection mode: {}", Configurations.CONNECTION_MODE_AS_STRING);
             return;
         }
 
-        if (IS_MANAGED_IDENTITY_ENABLED) {
+        if (Configurations.IS_MANAGED_IDENTITY_ENABLED) {
             logger.info("Using managed identity based authentication");
             cosmosClientBuilder = cosmosClientBuilder.credential(CREDENTIAL);
         } else {
@@ -148,7 +90,7 @@ public class CosmosDRDrillTesting {
             cosmosClientBuilder = cosmosClientBuilder.key(Configurations.key);
         }
 
-        for (int i = 0; i < COSMOS_CLIENT_COUNT; i++) {
+        for (int i = 0; i < Configurations.COSMOS_CLIENT_COUNT; i++) {
 
             logger.info("Creating client {}", i);
 
@@ -183,7 +125,7 @@ public class CosmosDRDrillTesting {
                 .repeat()
                 .flatMap(integer -> {
                     int random = ThreadLocalRandom.current().nextInt(3);
-                    int containerId = ThreadLocalRandom.current().nextInt(COSMOS_CLIENT_COUNT);
+                    int containerId = ThreadLocalRandom.current().nextInt(Configurations.COSMOS_CLIENT_COUNT);
                     switch (random) {
                         case 0:
                             return upsertItem(cosmosAsyncContainers.get(containerId));
@@ -204,7 +146,7 @@ public class CosmosDRDrillTesting {
     }
 
     private static Mono<CosmosItemResponse<Pojo>> upsertItem(CosmosAsyncContainer cosmosAsyncContainer) {
-        int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+        int finalI = ThreadLocalRandom.current().nextInt(Configurations.TOTAL_NUMBER_OF_DOCUMENTS);
 
         Pojo item = getItem(finalI, finalI);
 
@@ -225,7 +167,7 @@ public class CosmosDRDrillTesting {
 
     private static Mono<CosmosItemResponse<Pojo>> readItem(CosmosAsyncContainer cosmosAsyncContainer) {
 
-        int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+        int finalI = ThreadLocalRandom.current().nextInt(Configurations.TOTAL_NUMBER_OF_DOCUMENTS);
         logger.debug("read item: {}", finalI);
         Pojo item = getItem(finalI, finalI);
         return cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getId()), POINT_REQ_OPTS, Pojo.class)
@@ -244,7 +186,7 @@ public class CosmosDRDrillTesting {
 
     private static Mono<List<Pojo>> queryItem(CosmosAsyncContainer cosmosAsyncContainer) {
 
-        int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
+        int finalI = ThreadLocalRandom.current().nextInt(Configurations.TOTAL_NUMBER_OF_DOCUMENTS);
         logger.debug("query item: {}", finalI);
         Pojo item = getItem(finalI, finalI);
 
@@ -271,7 +213,7 @@ public class CosmosDRDrillTesting {
 
         AtomicInteger successfulInserts = new AtomicInteger(0);
 
-        while (successfulInserts.get() < TOTAL_NUMBER_OF_DOCUMENTS) {
+        while (successfulInserts.get() < Configurations.TOTAL_NUMBER_OF_DOCUMENTS) {
             int finalI = successfulInserts.get();
 
             Pojo item = getItem(finalI, finalI);
@@ -305,11 +247,11 @@ public class CosmosDRDrillTesting {
         for (CosmosAsyncClient cosmosAsyncClient : cosmosAsyncClients) {
             try {
                 logger.info("Setting up database...");
-                cosmosAsyncClient.createDatabaseIfNotExists(DATABASE_ID).block();
-                CosmosAsyncDatabase cosmosAsyncDatabase = cosmosAsyncClient.getDatabase(DATABASE_ID);
+                cosmosAsyncClient.createDatabaseIfNotExists(Configurations.DATABASE_ID).block();
+                CosmosAsyncDatabase cosmosAsyncDatabase = cosmosAsyncClient.getDatabase(Configurations.DATABASE_ID);
                 logger.info("Setting up container...");
-                cosmosAsyncDatabase.createContainerIfNotExists(CONTAINER_ID, PARTITION_KEY_PATH).block();
-                CosmosAsyncContainer cosmosAsyncContainer = cosmosAsyncDatabase.getContainer(CONTAINER_ID);
+                cosmosAsyncDatabase.createContainerIfNotExists(Configurations.CONTAINER_ID, Configurations.PARTITION_KEY_PATH).block();
+                CosmosAsyncContainer cosmosAsyncContainer = cosmosAsyncDatabase.getContainer(Configurations.CONTAINER_ID);
 
                 cosmosAsyncDatabases.add(cosmosAsyncDatabase);
                 cosmosAsyncContainers.add(cosmosAsyncContainer);
@@ -319,16 +261,5 @@ public class CosmosDRDrillTesting {
             }
             logger.info("Setup complete.");
         }
-    }
-
-    private static GatewayConnectionConfig getGatewayConnectionConfig() {
-        GatewayConnectionConfig gatewayConnectionConfig = GatewayConnectionConfig.getDefaultConfig();
-
-        if (IS_PROXY_ENABLED) {
-            System.setProperty("COSMOS.EMULATOR_SERVER_CERTIFICATE_VALIDATION_DISABLED", "true");
-            gatewayConnectionConfig.setProxy(new ProxyOptions(ProxyOptions.Type.HTTP, InetSocketAddress.createUnresolved(PROXY_HOST, PROXY_PORT)));
-        }
-
-        return gatewayConnectionConfig;
     }
 }
