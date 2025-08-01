@@ -12,6 +12,7 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.GatewayConnectionConfig;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.guava25.base.Strings;
+import com.azure.cosmos.models.CosmosClientTelemetryConfig;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
@@ -118,6 +119,9 @@ public class CosmosDRDrillTesting {
 
     private static final int PROCESSOR_COUNT = Runtime.getRuntime().availableProcessors();
 
+    private static final CosmosClientTelemetryConfig TELEMETRY_CONFIG = new CosmosClientTelemetryConfig()
+            .diagnosticsHandler(new SamplingCosmosDiagnosticsLogger(10, 60_000));
+
     public static void main(String[] args) {
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
@@ -150,6 +154,7 @@ public class CosmosDRDrillTesting {
 
             CosmosAsyncClient cosmosAsyncClient = cosmosClientBuilder
                     .userAgentSuffix("client-" + i)
+                    .clientTelemetryConfig(TELEMETRY_CONFIG.enableTransportLevelTracing())
                     .buildAsyncClient();
 
             cosmosAsyncClients.add(cosmosAsyncClient);
@@ -203,7 +208,7 @@ public class CosmosDRDrillTesting {
 
         Pojo item = getItem(finalI, finalI);
 
-        logger.info("upsert item: {}", finalI);
+        logger.debug("upsert item: {}", finalI);
         return cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getId()), POINT_REQ_OPTS)
                 .onErrorResume(throwable -> {
                     logger.error("Error occurred while upserting item", throwable);
@@ -221,7 +226,7 @@ public class CosmosDRDrillTesting {
     private static Mono<CosmosItemResponse<Pojo>> readItem(CosmosAsyncContainer cosmosAsyncContainer) {
 
         int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-        logger.info("read item: {}", finalI);
+        logger.debug("read item: {}", finalI);
         Pojo item = getItem(finalI, finalI);
         return cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getId()), POINT_REQ_OPTS, Pojo.class)
                 .onErrorResume(throwable -> {
@@ -240,7 +245,7 @@ public class CosmosDRDrillTesting {
     private static Mono<List<Pojo>> queryItem(CosmosAsyncContainer cosmosAsyncContainer) {
 
         int finalI = ThreadLocalRandom.current().nextInt(TOTAL_NUMBER_OF_DOCUMENTS);
-        logger.info("query item: {}", finalI);
+        logger.debug("query item: {}", finalI);
         Pojo item = getItem(finalI, finalI);
 
         SqlQuerySpec querySpec = new SqlQuerySpec(query);
