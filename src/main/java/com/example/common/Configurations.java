@@ -15,7 +15,7 @@ public class Configurations {
             StringUtils.defaultString(Strings.emptyToNull(System.getenv().get("DATABASE_ID")), "MigrationDB"));
     public static final String CONTAINER_ID = System.getProperty("CONTAINER_ID",
             StringUtils.defaultString(Strings.emptyToNull(System.getenv().get("CONTAINER_ID")), "MigrationContainer"));
-    public static final String PARTITION_KEY_PATH = "/id";
+    public static final String PARTITION_KEY_PATH = "/pk";
     public static final String TOTAL_DOCUMENTS = System.getProperty("TOTAL_DOCUMENTS",
             StringUtils.defaultString(Strings.emptyToNull(System.getenv().get("TOTAL_DOCUMENTS")), "100000"));
     public static final int TOTAL_NUMBER_OF_DOCUMENTS = Integer.parseInt(TOTAL_DOCUMENTS);

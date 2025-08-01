@@ -1,7 +1,6 @@
 package com.example.common;
 
 import com.azure.core.credential.TokenCredential;
-import com.azure.core.http.ProxyOptions;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosAsyncDatabase;
@@ -10,8 +9,6 @@ import com.azure.cosmos.CosmosEndToEndOperationLatencyPolicyConfig;
 import com.azure.cosmos.CosmosEndToEndOperationLatencyPolicyConfigBuilder;
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.GatewayConnectionConfig;
-import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
-import com.azure.cosmos.implementation.guava25.base.Strings;
 import com.azure.cosmos.models.CosmosClientTelemetryConfig;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.CosmosItemResponse;
@@ -25,12 +22,10 @@ import com.azure.identity.DefaultAzureCredentialBuilder;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -176,7 +171,7 @@ public class CosmosDRDrillTesting {
         Pojo item = getItem(finalI, finalI);
 
         logger.debug("upsert item: {}", finalI);
-        return cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getId()), POINT_REQ_OPTS)
+        return cosmosAsyncContainer.upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
                 .onErrorResume(throwable -> {
                     logger.error("Error occurred while upserting item", throwable);
 
@@ -195,7 +190,7 @@ public class CosmosDRDrillTesting {
         int finalI = ThreadLocalRandom.current().nextInt(Configurations.TOTAL_NUMBER_OF_DOCUMENTS);
         logger.debug("read item: {}", finalI);
         Pojo item = getItem(finalI, finalI);
-        return cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getId()), POINT_REQ_OPTS, Pojo.class)
+        return cosmosAsyncContainer.readItem(item.getId(), new PartitionKey(item.getPk()), POINT_REQ_OPTS, Pojo.class)
                 .onErrorResume(throwable -> {
                     logger.error("Error occurred while reading item", throwable);
 
@@ -217,7 +212,7 @@ public class CosmosDRDrillTesting {
 
         SqlQuerySpec querySpec = new SqlQuerySpec(query);
         querySpec.setParameters(Arrays.asList(new SqlParameter("@id", item.getId()), new SqlParameter("@pk",
-                item.getId())));
+                item.getPk())));
         return cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
                 .collectList()
                 .onErrorResume(throwable -> {
@@ -243,7 +238,7 @@ public class CosmosDRDrillTesting {
 
             Pojo item = getItem(finalI, finalI);
             cosmosAsyncContainer
-                    .upsertItem(item, new PartitionKey(item.getId()), POINT_REQ_OPTS)
+                    .upsertItem(item, new PartitionKey(item.getPk()), POINT_REQ_OPTS)
                     .doOnSuccess(ignore -> successfulInserts.incrementAndGet())
                     .onErrorResume(throwable -> {
                         logger.error("Error occurred while upserting item", throwable);
