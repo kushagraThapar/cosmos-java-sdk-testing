@@ -61,7 +61,18 @@ public class CosmosDRDrillTesting {
 
     public static void main(String[] args) {
 
-        Object waitObject = new Object();
+        // Add shutdown hook for graceful cleanup
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            logger.info("Shutdown hook triggered. Closing Cosmos clients...");
+            for (CosmosAsyncClient client : cosmosAsyncClients) {
+                try {
+                    client.close();
+                } catch (Exception e) {
+                    logger.error("Error closing Cosmos client", e);
+                }
+            }
+            logger.info("All Cosmos clients closed.");
+        }));
 
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
                 .endpoint(Configurations.endpoint)
@@ -114,30 +125,73 @@ public class CosmosDRDrillTesting {
         //  Start the workload
         startWorkload();
 
-        synchronized (waitObject) {
+        // Wait for the specified duration or indefinitely if no duration is set
+        if (Configurations.WORKLOAD_DURATION_PARSED != null) {
+            logger.info("Workload will run for: {}", Configurations.WORKLOAD_DURATION_PARSED);
             try {
-                waitObject.wait();
+                Thread.sleep(Configurations.WORKLOAD_DURATION_PARSED.toMillis());
+                logger.info("Workload duration completed. Shutting down...");
             } catch (InterruptedException e) {
                 logger.warn("Main thread interrupted: {}", e.getMessage(), e);
+                throw new RuntimeException(e);
+            }
+        } else {
+            logger.info("Workload will run indefinitely. Press Ctrl+C to stop.");
+            Object waitObject = new Object();
+            synchronized (waitObject) {
                 try {
+                    waitObject.wait();
+                } catch (InterruptedException e) {
+                    logger.warn("Main thread interrupted: {}", e.getMessage(), e);
+                    try {
+                        throw e;
+                    } catch (InterruptedException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                } catch (IllegalMonitorStateException e) {
+                    logger.error("Illegal monitor state: {}", e.getMessage(), e);
                     throw e;
-                } catch (InterruptedException ex) {
-                    throw new RuntimeException(ex);
                 }
-            } catch (IllegalMonitorStateException e) {
-                logger.error("Illegal monitor state: {}", e.getMessage(), e);
-                throw e;
             }
         }
     }
 
     private static void startWorkload() {
+        // Determine which operations to execute based on configuration
+        List<Integer> availableOperations = new ArrayList<>();
+        
+        if (Configurations.ONLY_UPSERTS) {
+            availableOperations.add(0); // Upsert
+            logger.info("Workload configured to execute ONLY_UPSERTS");
+        } else if (Configurations.ONLY_READS) {
+            availableOperations.add(1); // Read
+            logger.info("Workload configured to execute ONLY_READS");
+        } else if (Configurations.ONLY_QUERIES) {
+            availableOperations.add(2); // Query
+            logger.info("Workload configured to execute ONLY_QUERIES");
+        } else if (Configurations.ONLY_READALL) {
+            availableOperations.add(3); // ReadAll
+            logger.info("Workload configured to execute ONLY_READALL with PK values: {}", Configurations.READALL_PK_LIST);
+        } else {
+            // Default behavior - all operations
+            availableOperations.add(0); // Upsert
+            availableOperations.add(1); // Read
+            availableOperations.add(2); // Query
+            availableOperations.add(3); // ReadAll
+            logger.info("Workload configured to execute all operation types (upserts, reads, queries, readAll)");
+        }
+        
+        if (availableOperations.isEmpty()) {
+            logger.error("No operations configured to execute. Exiting.");
+            return;
+        }
+        
         Mono.just(1)
                 .repeat()
                 .flatMap(integer -> {
-                    int random = ThreadLocalRandom.current().nextInt(3);
+                    int randomOperation = availableOperations.get(ThreadLocalRandom.current().nextInt(availableOperations.size()));
                     int containerId = ThreadLocalRandom.current().nextInt(Configurations.COSMOS_CLIENT_COUNT);
-                    switch (random) {
+                    switch (randomOperation) {
                         case 0:
                             return Configurations.QPS > 0
                                     ? Mono.delay(Duration.ofMillis(1000 / Configurations.QPS))
@@ -153,6 +207,11 @@ public class CosmosDRDrillTesting {
                                     ? Mono.delay(Duration.ofMillis(1000 / Configurations.QPS))
                                     .then(queryItem(cosmosAsyncContainers.get(containerId)))
                                     : queryItem(cosmosAsyncContainers.get(containerId));
+                        case 3:
+                            return Configurations.QPS > 0
+                                    ? Mono.delay(Duration.ofMillis(1000 / Configurations.QPS))
+                                    .then(readAllItems(cosmosAsyncContainers.get(containerId)))
+                                    : readAllItems(cosmosAsyncContainers.get(containerId));
                         default:
                             return Mono.empty();
                     }
@@ -226,6 +285,32 @@ public class CosmosDRDrillTesting {
                     return Mono.empty();
                 });
 
+    }
+
+    private static Mono<List<Pojo>> readAllItems(CosmosAsyncContainer cosmosAsyncContainer) {
+        // Select a random PK from the predefined list
+        String selectedPk = Configurations.READALL_PK_LIST.get(ThreadLocalRandom.current().nextInt(Configurations.READALL_PK_LIST.size()));
+        String pkValue = "pojo-pk-" + selectedPk;
+        
+        logger.debug("readAll items for pk: {}", pkValue);
+        
+        // Query to get all items with the selected partition key
+        String readAllQuery = "SELECT * FROM c WHERE c.pk = @pk";
+        SqlQuerySpec querySpec = new SqlQuerySpec(readAllQuery);
+        querySpec.setParameters(Arrays.asList(new SqlParameter("@pk", pkValue)));
+        
+        return cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
+                .collectList()
+                .onErrorResume(throwable -> {
+                    logger.error("Error occurred while reading all items for pk: {}", pkValue, throwable);
+
+                    if (throwable instanceof CosmosException) {
+                        CosmosException cosmosException = (CosmosException) throwable;
+                        logger.error("CosmosException: {} - {}", cosmosException.getStatusCode(), cosmosException.getDiagnostics().getDiagnosticsContext());
+                    }
+
+                    return Mono.empty();
+                });
     }
 
     private static void insertData(CosmosAsyncContainer cosmosAsyncContainer) {
