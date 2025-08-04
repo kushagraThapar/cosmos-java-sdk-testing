@@ -293,13 +293,8 @@ public class CosmosDRDrillTesting {
         String pkValue = "pojo-pk-" + selectedPk;
         
         logger.debug("readAll items for pk: {}", pkValue);
-        
-        // Query to get all items with the selected partition key
-        String readAllQuery = "SELECT * FROM c WHERE c.pk = @pk";
-        SqlQuerySpec querySpec = new SqlQuerySpec(readAllQuery);
-        querySpec.setParameters(Arrays.asList(new SqlParameter("@pk", pkValue)));
-        
-        return cosmosAsyncContainer.queryItems(querySpec, QUERY_REQ_OPTS, Pojo.class)
+
+        return cosmosAsyncContainer.readAllItems(new PartitionKey(selectedPk), Pojo.class)
                 .collectList()
                 .onErrorResume(throwable -> {
                     logger.error("Error occurred while reading all items for pk: {}", pkValue, throwable);
