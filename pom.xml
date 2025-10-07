@@ -85,6 +85,19 @@
       <artifactId>slf4j-log4j12</artifactId>
       <version>2.0.9</version>
     </dependency>
+    <!--This is to reproduce an issue with the logging
+    where the exceptions are not logged if passed at the end of the parameterized log message.-->
+    <!--    <dependency>-->
+    <!--      <groupId>org.slf4j</groupId>-->
+    <!--      <artifactId>slf4j-api</artifactId>-->
+    <!--      <version>1.5.6</version>-->
+    <!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>org.slf4j</groupId>-->
+    <!--      <artifactId>slf4j-log4j12</artifactId>-->
+    <!--      <version>1.5.6</version>-->
+    <!--    </dependency>-->
+
     <dependency>
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-api</artifactId>
