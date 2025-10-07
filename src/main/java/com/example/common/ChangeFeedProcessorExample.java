@@ -108,6 +108,7 @@ public class ChangeFeedProcessorExample {
 
     private static void runChangeFeedProcessor() {
         ChangeFeedProcessorOptions changeFeedProcessorOptions = new ChangeFeedProcessorOptions();
+        changeFeedProcessorOptions.setStartFromBeginning(true);
         ChangeFeedProcessor changeFeedProcessor = new ChangeFeedProcessorBuilder()
             .feedContainer(feedContainer)
             .leaseContainer(leaseContainer)
@@ -127,8 +128,8 @@ public class ChangeFeedProcessorExample {
         logger.info("Starting change feed processor");
         changeFeedProcessor.start().subscribe();
         try {
-            logger.info("{} going to sleep for 10 seconds", Thread.currentThread().getName());
-            Thread.sleep(10 * 1000);
+            logger.info("{} going to sleep for 100 seconds", Thread.currentThread().getName());
+            Thread.sleep(100 * 1000);
         } catch (InterruptedException e) {
             logger.error("Error occurred while sleeping", e);
         }
